@@ -6,7 +6,7 @@
     <title>FileDesk — Plateforme de dépôt</title>
     <link rel="stylesheet" href="style.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;1,9..40,300&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
 
@@ -24,7 +24,6 @@
             </svg>
             FileDesk
         </div>
-        <div class="mobile-badge" id="mobileBadge">0</div>
     </header>
 
     <!-- Sidebar -->
@@ -58,17 +57,10 @@
                     </svg>
                 </span>
                 <span class="nav-text">Explorateur</span>
-                <span class="nav-count" id="navCount">0</span>
             </button>
         </nav>
 
         <div class="sidebar-footer">
-            <div class="storage-block">
-                <div class="storage-top">
-                    <span class="storage-label">Fichiers déposés</span>
-                    <span class="storage-num" id="totalFiles">0</span>
-                </div>
-            </div>
             <div class="user-row">
                 <div class="user-avatar" id="userAvatarEl">
                     <span id="userInitials">–</span>
@@ -78,6 +70,7 @@
                     <p class="user-role" id="userRole">Invité</p>
                 </div>
             </div>
+            <button type="button" id="logoutBtn" class="sidebar-logout-btn">Se déconnecter</button>
         </div>
     </aside>
 
@@ -103,26 +96,22 @@
                         </div>
                         <form id="userForm" novalidate>
                             <div class="form-group">
-                                <label for="uploaderName">Nom complet <span class="req">*</span></label>
-                                <div class="input-wrap">
-                                    <svg class="input-ico" width="15" height="15" viewBox="0 0 20 20" fill="none">
-                                        <circle cx="10" cy="7" r="3" stroke="currentColor" stroke-width="1.75"/>
-                                        <path d="M3 18c0-3.866 3.134-7 7-7s7 3.134 7 7" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/>
-                                    </svg>
-                                    <input type="text" id="uploaderName" placeholder="Jean Dupont" required autocomplete="name">
+                                <label for="uploadTargetFolder">Dossier source</label>
+                                <div class="folder-picker input-wrap-select" id="uploadFolderPicker">
+                                    <input type="hidden" id="uploadTargetFolder" value="root">
+                                    <button type="button" id="uploadFolderPickerBtn" class="folder-picker-btn" aria-haspopup="listbox" aria-expanded="false">
+                                        <span class="folder-picker-icon" aria-hidden="true">
+                                            <svg width="15" height="15" viewBox="0 0 20 20" fill="none">
+                                                <path d="M2 7h4l2-2h10a1 1 0 011 1v9a1 1 0 01-1 1H2a1 1 0 01-1-1V8a1 1 0 011-1z" stroke="currentColor" stroke-width="1.75"/>
+                                            </svg>
+                                        </span>
+                                        <span id="uploadFolderPickerLabel">Racine</span>
+                                        <span class="folder-picker-caret" aria-hidden="true">▾</span>
+                                    </button>
+                                    <div id="uploadFolderPickerMenu" class="folder-picker-menu" role="listbox" aria-label="Arborescence des dossiers">
+                                        <div id="uploadFolderTree" class="folder-tree"></div>
+                                    </div>
                                 </div>
-                                <span class="field-error" id="nameError">Ce champ est requis</span>
-                            </div>
-                            <div class="form-group">
-                                <label for="uploaderEmail">Email <span class="opt">— optionnel</span></label>
-                                <div class="input-wrap">
-                                    <svg class="input-ico" width="15" height="15" viewBox="0 0 20 20" fill="none">
-                                        <rect x="2" y="5" width="16" height="11" rx="2" stroke="currentColor" stroke-width="1.75"/>
-                                        <path d="M2 8l8 4.5L18 8" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/>
-                                    </svg>
-                                    <input type="email" id="uploaderEmail" placeholder="jean@exemple.fr" autocomplete="email">
-                                </div>
-                                <span class="field-error" id="emailError">Format d'email invalide</span>
                             </div>
                             <div class="form-group">
                                 <label for="uploaderComment">Commentaire <span class="opt">— optionnel</span></label>
@@ -298,6 +287,18 @@
             <div class="modal-actions">
                 <button class="btn-ghost" id="folderCancelBtn">Annuler</button>
                 <button class="btn-accent" id="folderConfirmBtn">Créer</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Item Info Modal (mobile) -->
+    <div id="itemInfoModal" class="modal" role="dialog" aria-modal="true" style="display:none">
+        <div class="modal-backdrop" id="itemInfoModalBackdrop"></div>
+        <div class="modal-box modal-box-sm">
+            <h3 id="itemInfoTitle">Infos</h3>
+            <div id="itemInfoBody" class="item-info-body"></div>
+            <div class="modal-actions">
+                <button class="btn-accent" id="itemInfoCloseBtn">Fermer</button>
             </div>
         </div>
     </div>

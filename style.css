@@ -53,7 +53,7 @@
 html { scroll-behavior: smooth; }
 
 body {
-    font-family: 'DM Sans', system-ui, -apple-system, sans-serif;
+    font-family: 'Poppins', system-ui, -apple-system, sans-serif;
     background: var(--bg);
     color: var(--ink);
     line-height: 1.6;
@@ -95,7 +95,7 @@ body {
 }
 
 .logo-text {
-    font-family: 'Syne', sans-serif;
+    font-family: 'Poppins', sans-serif;
     font-weight: 700;
     font-size: 1.1rem;
     color: #fff;
@@ -130,7 +130,7 @@ body {
     color: rgba(255,255,255,.5);
     cursor: pointer;
     transition: background var(--t) var(--ease), color var(--t) var(--ease);
-    font-family: 'DM Sans', sans-serif;
+    font-family: 'Poppins', sans-serif;
     font-size: 0.875rem;
     font-weight: 500;
     text-align: left;
@@ -203,7 +203,7 @@ body {
 }
 
 .storage-num {
-    font-family: 'Syne', sans-serif;
+    font-family: 'Poppins', sans-serif;
     font-size: 1.1rem;
     font-weight: 700;
     color: #fff;
@@ -220,7 +220,7 @@ body {
     border-radius: 50%;
     background: linear-gradient(135deg, var(--accent), #60a5fa);
     display: flex; align-items: center; justify-content: center;
-    font-family: 'Syne', sans-serif;
+    font-family: 'Poppins', sans-serif;
     font-weight: 700;
     font-size: 0.7rem;
     color: #fff;
@@ -241,6 +241,26 @@ body {
 .user-role {
     font-size: 0.7rem;
     color: rgba(255,255,255,.35);
+}
+
+.sidebar-logout-btn {
+    width: 100%;
+    border: 1px solid rgba(255,255,255,.18);
+    background: rgba(255,255,255,.06);
+    color: rgba(255,255,255,.84);
+    font-family: 'Poppins', sans-serif;
+    font-size: 0.78rem;
+    font-weight: 500;
+    border-radius: var(--r-sm);
+    padding: 0.5rem 0.7rem;
+    cursor: pointer;
+    transition: background var(--t) var(--ease), border-color var(--t) var(--ease), color var(--t) var(--ease);
+}
+
+.sidebar-logout-btn:hover {
+    background: rgba(255,255,255,.12);
+    border-color: rgba(255,255,255,.28);
+    color: #fff;
 }
 
 /* ===========================
@@ -284,7 +304,7 @@ body {
 
 .mobile-logo {
     flex: 1;
-    font-family: 'Syne', sans-serif;
+    font-family: 'Poppins', sans-serif;
     font-weight: 700;
     font-size: 1rem;
     color: var(--ink);
@@ -349,7 +369,7 @@ body {
 }
 
 .page-hero-text h2 {
-    font-family: 'Syne', sans-serif;
+    font-family: 'Poppins', sans-serif;
     font-size: 1.875rem;
     font-weight: 700;
     color: var(--ink);
@@ -416,7 +436,7 @@ body {
 .card-dot.accent { background: var(--accent); }
 
 .card-title-row h3 {
-    font-family: 'Syne', sans-serif;
+    font-family: 'Poppins', sans-serif;
     font-size: 0.95rem;
     font-weight: 600;
     color: var(--ink);
@@ -446,6 +466,10 @@ body {
     display: flex; align-items: center;
 }
 
+.input-wrap-select {
+    position: relative;
+}
+
 .input-ico {
     position: absolute;
     left: 0.75rem;
@@ -460,7 +484,7 @@ body {
     padding: 0.65rem 0.875rem 0.65rem 2.25rem;
     border: 1.5px solid var(--line);
     border-radius: var(--r-sm);
-    font-family: 'DM Sans', sans-serif;
+    font-family: 'Poppins', sans-serif;
     font-size: 0.875rem;
     color: var(--ink);
     background: var(--surface);
@@ -472,7 +496,147 @@ body {
     padding: 0.65rem 0.875rem;
     resize: vertical;
     min-height: 72px;
-    font-family: 'DM Sans', sans-serif;
+    font-family: 'Poppins', sans-serif;
+}
+
+.folder-picker-btn {
+    width: 100%;
+    min-height: 42px;
+    border: 1.5px solid var(--line);
+    border-radius: var(--r-sm);
+    background: var(--surface);
+    color: var(--ink);
+    font-family: 'Poppins', sans-serif;
+    font-size: 0.85rem;
+    padding: 0.55rem 0.75rem 0.55rem 0.75rem;
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    text-align: left;
+    cursor: pointer;
+    transition: border-color var(--t) var(--ease), box-shadow var(--t) var(--ease);
+}
+
+.folder-picker-icon {
+    color: var(--muted-2);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+#uploadFolderPickerLabel {
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.folder-picker-caret {
+    color: var(--muted-2);
+    transition: transform var(--t) var(--ease);
+}
+
+.folder-picker.open .folder-picker-caret {
+    transform: rotate(180deg);
+}
+
+.folder-picker-btn:focus-visible,
+.folder-picker.open .folder-picker-btn {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-s);
+    outline: none;
+}
+
+.folder-picker-menu {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: calc(100% + 0.35rem);
+    background: var(--surface);
+    border: 1.5px solid var(--line);
+    border-radius: var(--r-sm);
+    box-shadow: var(--shadow-lg);
+    padding: 0.35rem;
+    max-height: 260px;
+    overflow: auto;
+    z-index: 120;
+    display: none;
+}
+
+.folder-picker.open .folder-picker-menu {
+    display: block;
+}
+
+.folder-tree {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+}
+
+.folder-tree-row {
+    --level: 0;
+    display: flex;
+    align-items: center;
+    padding-left: calc(var(--level) * 14px);
+}
+
+.folder-tree-toggle {
+    width: 22px;
+    height: 22px;
+    border: none;
+    background: transparent;
+    color: var(--muted-2);
+    cursor: pointer;
+    font-size: 0.62rem;
+    transition: transform var(--t) var(--ease), color var(--t) var(--ease);
+    border-radius: var(--r-xs);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.folder-tree-toggle:hover {
+    background: var(--bg-2);
+    color: var(--ink-3);
+}
+
+.folder-tree-toggle.expanded {
+    transform: rotate(90deg);
+}
+
+.folder-tree-toggle.empty {
+    cursor: default;
+    opacity: 0.3;
+}
+
+.folder-tree-item {
+    flex: 1;
+    min-height: 30px;
+    border: none;
+    background: transparent;
+    border-radius: var(--r-xs);
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    font-family: 'Poppins', sans-serif;
+    font-size: 0.84rem;
+    color: var(--ink-2);
+    cursor: pointer;
+    padding: 0.25rem 0.5rem;
+}
+
+.folder-tree-item:hover {
+    background: var(--bg-2);
+}
+
+.folder-tree-row.selected .folder-tree-item {
+    background: var(--accent-s);
+    color: var(--accent-h);
+    font-weight: 600;
+}
+
+.folder-tree-icon {
+    font-size: 0.85rem;
 }
 
 .input-wrap input:focus,
@@ -567,7 +731,7 @@ body {
 }
 
 .dz-title {
-    font-family: 'Syne', sans-serif;
+    font-family: 'Poppins', sans-serif;
     font-size: 0.95rem;
     font-weight: 600;
     color: var(--ink-2);
@@ -690,7 +854,7 @@ body {
     border: 1.5px solid var(--accent);
     padding: 0.5rem 1.25rem;
     border-radius: var(--r-sm);
-    font-family: 'DM Sans', sans-serif;
+    font-family: 'Poppins', sans-serif;
     font-size: 0.85rem;
     font-weight: 500;
     cursor: pointer;
@@ -710,7 +874,7 @@ body {
     color: #fff;
     border: none;
     border-radius: var(--r-sm);
-    font-family: 'Syne', sans-serif;
+    font-family: 'Poppins', sans-serif;
     font-size: 0.9rem;
     font-weight: 600;
     letter-spacing: -.01em;
@@ -734,7 +898,7 @@ body {
     border: 1.5px solid var(--line);
     padding: 0.5rem 0.875rem;
     border-radius: var(--r-sm);
-    font-family: 'DM Sans', sans-serif;
+    font-family: 'Poppins', sans-serif;
     font-size: 0.82rem;
     font-weight: 500;
     cursor: pointer;
@@ -755,7 +919,7 @@ body {
     border: none;
     padding: 0.5rem 0.875rem;
     border-radius: var(--r-sm);
-    font-family: 'DM Sans', sans-serif;
+    font-family: 'Poppins', sans-serif;
     font-size: 0.82rem;
     font-weight: 500;
     cursor: pointer;
@@ -772,7 +936,7 @@ body {
 
 .btn-text-sm {
     background: none; border: none;
-    font-family: 'DM Sans', sans-serif;
+    font-family: 'Poppins', sans-serif;
     font-size: 0.75rem;
     color: var(--muted);
     cursor: pointer;
@@ -790,7 +954,7 @@ body {
     border: 1.5px solid var(--line);
     padding: 0.55rem 1rem;
     border-radius: var(--r-sm);
-    font-family: 'DM Sans', sans-serif;
+    font-family: 'Poppins', sans-serif;
     font-size: 0.85rem;
     font-weight: 500;
     cursor: pointer;
@@ -871,7 +1035,7 @@ body {
     padding: 0.6rem 0.875rem 0.6rem 2.2rem;
     border: 1.5px solid var(--line);
     border-radius: var(--r-sm);
-    font-family: 'DM Sans', sans-serif;
+    font-family: 'Poppins', sans-serif;
     font-size: 0.85rem;
     background: var(--surface);
     color: var(--ink);
@@ -894,7 +1058,7 @@ body {
     padding: 0.6rem 0.75rem;
     border: 1.5px solid var(--line);
     border-radius: var(--r-sm);
-    font-family: 'DM Sans', sans-serif;
+    font-family: 'Poppins', sans-serif;
     font-size: 0.82rem;
     color: var(--ink-3);
     background: var(--surface);
@@ -944,6 +1108,18 @@ body {
 
 .files-table tbody tr:hover { background: var(--bg); }
 
+.files-table tbody tr.folder-row {
+    background: linear-gradient(90deg, rgba(217,119,6,.10) 0%, rgba(217,119,6,.03) 62%, transparent 100%);
+}
+
+.files-table tbody tr.folder-row:hover {
+    background: linear-gradient(90deg, rgba(217,119,6,.14) 0%, rgba(217,119,6,.05) 62%, transparent 100%);
+}
+
+.files-table tbody tr.folder-row td:first-child {
+    border-left: 3px solid rgba(217,119,6,.55);
+}
+
 .files-table td {
     padding: 0.875rem 1.125rem;
     font-size: 0.85rem;
@@ -951,12 +1127,16 @@ body {
     vertical-align: middle;
 }
 
+.cell-muted {
+    color: var(--muted);
+}
+
 .folder-btn {
     display: inline-flex;
     align-items: center;
     gap: 0.5rem;
     background: none; border: none;
-    font-family: 'DM Sans', sans-serif;
+    font-family: 'Poppins', sans-serif;
     font-size: 0.875rem;
     font-weight: 600;
     color: var(--ink);
@@ -966,6 +1146,21 @@ body {
 }
 
 .folder-btn:hover { color: var(--accent); }
+
+.folder-chip {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.08rem 0.4rem;
+    border-radius: 999px;
+    border: 1px solid rgba(217,119,6,.22);
+    background: rgba(217,119,6,.12);
+    color: var(--amber);
+    font-size: 0.62rem;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+}
 
 .folder-btn-icon {
     width: 28px; height: 28px;
@@ -1026,13 +1221,17 @@ body {
     border: 1.5px solid var(--line);
     background: var(--surface);
     border-radius: var(--r-xs);
-    font-family: 'DM Sans', sans-serif;
+    font-family: 'Poppins', sans-serif;
     font-size: 0.72rem;
     font-weight: 500;
     color: var(--muted);
     cursor: pointer;
     transition: all var(--t) var(--ease);
     white-space: nowrap;
+}
+
+.mobile-info-btn {
+    display: none;
 }
 
 .action-btn:hover {
@@ -1071,7 +1270,7 @@ body {
 }
 
 .empty-title {
-    font-family: 'Syne', sans-serif;
+    font-family: 'Poppins', sans-serif;
     font-size: 1rem;
     font-weight: 600;
     color: var(--ink-2);
@@ -1174,7 +1373,7 @@ body {
 }
 
 .modal-box h3 {
-    font-family: 'Syne', sans-serif;
+    font-family: 'Poppins', sans-serif;
     font-size: 1.2rem;
     font-weight: 700;
     color: var(--ink);
@@ -1198,7 +1397,7 @@ body {
     border: none;
     padding: 0.7rem 2rem;
     border-radius: var(--r-sm);
-    font-family: 'Syne', sans-serif;
+    font-family: 'Poppins', sans-serif;
     font-size: 0.9rem;
     font-weight: 600;
     cursor: pointer;
@@ -1216,6 +1415,39 @@ body {
     display: flex; gap: 0.625rem;
     justify-content: flex-end;
     margin-top: 1.5rem;
+}
+
+.item-info-body {
+    display: flex;
+    flex-direction: column;
+    gap: 0.55rem;
+    margin-top: 1rem;
+}
+
+.item-info-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 1rem;
+    padding: 0.55rem 0.65rem;
+    border: 1px solid var(--line);
+    border-radius: var(--r-xs);
+    background: var(--bg);
+}
+
+.item-info-label {
+    font-size: 0.74rem;
+    color: var(--muted);
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.item-info-value {
+    font-size: 0.82rem;
+    color: var(--ink-2);
+    text-align: right;
+    font-weight: 500;
 }
 
 @keyframes fadeIn {
@@ -1276,8 +1508,113 @@ body {
     .selects-row { flex-wrap: wrap; }
     .sel { flex: 1; min-width: 120px; }
 
-    .table-wrap { overflow-x: auto; }
-    .files-table { min-width: 700px; }
+    .breadcrumb {
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        white-space: nowrap;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .table-wrap {
+        overflow: visible;
+        background: transparent;
+        border: none;
+        box-shadow: none;
+    }
+
+    .files-table {
+        min-width: 0;
+        border-collapse: separate;
+        border-spacing: 0 0.45rem;
+    }
+
+    .files-table thead {
+        display: none;
+    }
+
+    .files-table tbody {
+        display: block;
+    }
+
+    .files-table tbody tr {
+        display: block;
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: var(--r-sm);
+        box-shadow: var(--shadow-sm);
+        overflow: hidden;
+    }
+
+    .files-table tbody tr:hover {
+        background: var(--surface);
+    }
+
+    .files-table tbody tr.folder-row {
+        background: linear-gradient(145deg, rgba(217,119,6,.11) 0%, rgba(217,119,6,.04) 38%, #fff 100%);
+        border-color: rgba(217,119,6,.28);
+    }
+
+    .files-table tbody tr.folder-row td:first-child {
+        border-left: 4px solid rgba(217,119,6,.6);
+    }
+
+    .files-table td {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 0.6rem;
+        padding: 0.42rem 0.7rem;
+        border-bottom: 1px solid var(--line);
+        font-size: 0.78rem;
+    }
+
+    .files-table td:last-child {
+        border-bottom: none;
+    }
+
+    .files-table td::before { display: none; }
+
+    .files-table td:nth-child(2),
+    .files-table td:nth-child(3),
+    .files-table td:nth-child(4),
+    .files-table td:nth-child(5) {
+        display: none;
+    }
+
+    .files-table td.cell-name {
+        display: block;
+        padding-top: 0.52rem;
+        padding-bottom: 0.36rem;
+    }
+
+    .files-table td.cell-name::before {
+        display: none;
+    }
+
+    .files-table td.cell-name .folder-btn,
+    .files-table td.cell-name .file-name-cell {
+        width: 100%;
+    }
+
+    .files-table td.actions-cell {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 0.32rem;
+        padding-top: 0.35rem;
+        padding-bottom: 0.55rem;
+    }
+
+    .files-table td.actions-cell .action-btn {
+        min-height: 30px;
+        font-size: 0.72rem;
+        padding: 0.26rem 0.5rem;
+        margin: 0;
+    }
+
+    .mobile-info-btn {
+        display: inline-flex;
+    }
 
     .toast-container { left: 1rem; right: 1rem; bottom: 1rem; }
     .toast { max-width: unset; }

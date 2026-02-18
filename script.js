@@ -3,22 +3,34 @@
 // ===========================
 const STORAGE_KEY = 'filedesk_v2';
 const LEGACY_STORAGE_KEY = 'uploadedFiles';
+const AUTH_STORAGE_KEY = 'fleursville_current_user';
+const AUTH_CACHE_KEY = 'filedesk_current_user_cache';
+const API_BASE_URL = (window.AppConfig && window.AppConfig.apiBaseUrl) || 'http://localhost:3000';
 
 let selectedFiles = [];
 let fileSystemData = createDefaultFileSystem();
 let currentFolderId = 'root';
+let expandedUploadFolderIds = new Set(['root']);
+let currentAuthUser = null;
 
 // ===========================
 // INITIALISATION
 // ===========================
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
+    const isAuthenticated = await initAuth();
+    if (!isAuthenticated) {
+        return;
+    }
+
     loadStoredFiles();
     initNavigation();
     initDropZone();
     initFilters();
     initMobileMenu();
     initModals();
+    initUploadFolderPicker();
     updateFilesCount();
+    populateUploadFolderSelect(currentFolderId);
     updateCurrentFolderHints();
 
     document.getElementById('browseBtn').addEventListener('click', (e) => {
@@ -34,9 +46,6 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('explorerFileInput').click();
     });
     document.getElementById('explorerFileInput').addEventListener('change', handleExplorerUpload);
-
-    // Live name → avatar
-    document.getElementById('uploaderName').addEventListener('input', updateAvatarFromName);
 });
 
 // ===========================
@@ -103,6 +112,71 @@ function closeMobileSidebar() {
 }
 
 // ===========================
+// AUTHENTIFICATION
+// ===========================
+async function initAuth() {
+    const savedId = localStorage.getItem(AUTH_STORAGE_KEY);
+    if (!savedId) {
+        redirectToLogin();
+        return false;
+    }
+
+    try {
+        const response = await fetch(`${API_BASE_URL}/api/users/${encodeURIComponent(savedId)}`);
+        if (!response.ok) throw new Error('Unauthorized');
+        const user = await response.json();
+        currentAuthUser = user;
+        localStorage.setItem(AUTH_CACHE_KEY, JSON.stringify(user));
+        hydrateUserUI(user);
+        bindLogout();
+        return true;
+    } catch (error) {
+        localStorage.removeItem(AUTH_STORAGE_KEY);
+        localStorage.removeItem(AUTH_CACHE_KEY);
+        redirectToLogin();
+        return false;
+    }
+}
+
+function hydrateUserUI(user) {
+    const name = (user && user.name && user.name.trim()) || user.username || 'Utilisateur';
+    const initials = name
+        .split(' ')
+        .filter(Boolean)
+        .map(word => word[0].toUpperCase())
+        .slice(0, 2)
+        .join('') || 'U';
+
+    const roleMap = {
+        admin: 'Administrateur',
+        alternant: 'Alternant',
+        salarie: 'Salarié'
+    };
+
+    const initialsEl = document.getElementById('userInitials');
+    const nameEl = document.getElementById('userName');
+    const roleEl = document.getElementById('userRole');
+
+    if (initialsEl) initialsEl.textContent = initials;
+    if (nameEl) nameEl.textContent = name;
+    if (roleEl) roleEl.textContent = roleMap[user.role] || user.role || 'Utilisateur';
+}
+
+function bindLogout() {
+    const logoutBtn = document.getElementById('logoutBtn');
+    if (!logoutBtn) return;
+    logoutBtn.addEventListener('click', () => {
+        localStorage.removeItem(AUTH_STORAGE_KEY);
+        localStorage.removeItem(AUTH_CACHE_KEY);
+        redirectToLogin();
+    });
+}
+
+function redirectToLogin() {
+    window.location.href = 'login.html';
+}
+
+// ===========================
 // MODALS
 // ===========================
 function initModals() {
@@ -112,6 +186,8 @@ function initModals() {
     document.getElementById('folderCancelBtn').addEventListener('click', closeFolderModal);
     document.getElementById('folderModalBackdrop').addEventListener('click', closeFolderModal);
     document.getElementById('folderConfirmBtn').addEventListener('click', confirmCreateFolder);
+    document.getElementById('itemInfoCloseBtn').addEventListener('click', closeItemInfoModal);
+    document.getElementById('itemInfoModalBackdrop').addEventListener('click', closeItemInfoModal);
     document.getElementById('folderNameInput').addEventListener('keydown', (e) => {
         if (e.key === 'Enter') confirmCreateFolder();
         if (e.key === 'Escape') closeFolderModal();
@@ -121,6 +197,29 @@ function initModals() {
         if (e.key === 'Escape') {
             closeSuccessModal();
             closeFolderModal();
+            closeItemInfoModal();
+        }
+    });
+}
+
+function initUploadFolderPicker() {
+    const picker = document.getElementById('uploadFolderPicker');
+    const button = document.getElementById('uploadFolderPickerBtn');
+    const menu = document.getElementById('uploadFolderPickerMenu');
+    if (!picker || !button || !menu) return;
+
+    button.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const isOpen = picker.classList.contains('open');
+        picker.classList.toggle('open', !isOpen);
+        button.setAttribute('aria-expanded', String(!isOpen));
+    });
+
+    document.addEventListener('click', (e) => {
+        if (!picker.contains(e.target)) {
+            picker.classList.remove('open');
+            button.setAttribute('aria-expanded', 'false');
         }
     });
 }
@@ -148,6 +247,42 @@ function openFolderModal() {
 
 function closeFolderModal() {
     document.getElementById('folderModal').style.display = 'none';
+}
+
+function showItemInfoModal(itemId) {
+    const item = fileSystemData.nodes[itemId];
+    if (!item) return;
+
+    const titleEl = document.getElementById('itemInfoTitle');
+    const bodyEl = document.getElementById('itemInfoBody');
+    const modal = document.getElementById('itemInfoModal');
+    if (!titleEl || !bodyEl || !modal) return;
+
+    const lines = item.type === 'folder'
+        ? [
+            ['Type', 'Dossier'],
+            ['Nom', item.name],
+            ['Date', new Date(item.createdAt).toLocaleDateString('fr-FR')]
+        ]
+        : [
+            ['Type', item.fileType],
+            ['Nom', item.name],
+            ['Taille', formatFileSize(item.fileSize)],
+            ['Déposé par', item.uploaderName || '—'],
+            ['Date', `${item.uploadDate} ${item.uploadTime || ''}`.trim()],
+            ['Commentaire', item.comment || '—']
+        ];
+
+    titleEl.textContent = `Infos ${item.type === 'folder' ? 'dossier' : 'fichier'}`;
+    bodyEl.innerHTML = lines.map(([label, value]) => (
+        `<div class="item-info-row"><span class="item-info-label">${escapeHtml(label)}</span><span class="item-info-value">${escapeHtml(value)}</span></div>`
+    )).join('');
+    modal.style.display = 'flex';
+}
+
+function closeItemInfoModal() {
+    const modal = document.getElementById('itemInfoModal');
+    if (modal) modal.style.display = 'none';
 }
 
 function confirmCreateFolder() {
@@ -307,103 +442,70 @@ function clearAllFiles() {
 }
 
 // ===========================
-// VALIDATION
-// ===========================
-function validateForm() {
-    let valid = true;
-
-    const nameInput = document.getElementById('uploaderName');
-    const emailInput = document.getElementById('uploaderEmail');
-    const nameError = document.getElementById('nameError');
-    const emailError = document.getElementById('emailError');
-
-    // Reset
-    nameInput.classList.remove('error');
-    emailInput.classList.remove('error');
-    nameError.classList.remove('visible');
-    emailError.classList.remove('visible');
-
-    const name = nameInput.value.trim();
-    if (!name) {
-        nameInput.classList.add('error');
-        nameError.classList.add('visible');
-        nameInput.focus();
-        valid = false;
-    }
-
-    const email = emailInput.value.trim();
-    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-        emailInput.classList.add('error');
-        emailError.classList.add('visible');
-        if (valid) emailInput.focus();
-        valid = false;
-    }
-
-    return valid;
-}
-
-// ===========================
 // SOUMISSION
 // ===========================
 function handleSubmit() {
-    if (!validateForm()) return;
-
     if (selectedFiles.length === 0) {
         showToast('Sélectionnez au moins un fichier', 'error');
         return;
     }
 
-    const name = document.getElementById('uploaderName').value.trim();
-    const email = document.getElementById('uploaderEmail').value.trim();
-    const comment = document.getElementById('uploaderComment').value.trim();
+    if (!currentAuthUser) {
+        showToast('Session invalide, reconnectez-vous.', 'error');
+        redirectToLogin();
+        return;
+    }
 
-    addFilesToCurrentFolder(selectedFiles, { name, email, comment });
+    const name = (currentAuthUser.name || currentAuthUser.username || 'Utilisateur').trim();
+    const email = (currentAuthUser.email || '').trim();
+    const comment = document.getElementById('uploaderComment').value.trim();
+    const targetFolderId = document.getElementById('uploadTargetFolder').value || currentFolderId;
+
+    addFilesToFolder(selectedFiles, { name, email, comment }, targetFolderId);
     showSuccessModal(selectedFiles.length);
     resetUploadForm();
-    updateAvatarFromName();
 }
 
 function resetUploadForm() {
-    document.getElementById('uploaderName').value = '';
-    document.getElementById('uploaderEmail').value = '';
     document.getElementById('uploaderComment').value = '';
     document.getElementById('fileInput').value = '';
     selectedFiles = [];
     document.getElementById('uploadedFilesPreview').style.display = 'none';
-
-    // Reset validation state
-    ['uploaderName', 'uploaderEmail'].forEach(id => {
-        document.getElementById(id).classList.remove('error');
-    });
-    ['nameError', 'emailError'].forEach(id => {
-        document.getElementById(id).classList.remove('visible');
-    });
 }
 
 function handleExplorerUpload(e) {
     const files = e.target.files;
     if (!files || files.length === 0) return;
 
-    // Use stored name or prompt
-    const storedName = document.getElementById('uploaderName').value.trim();
-    const name = storedName || prompt('Nom complet du déposant :', '');
-    if (!name || !name.trim()) {
-        showToast('Upload annulé — nom requis', 'error');
+    if (!currentAuthUser) {
+        showToast('Session invalide, reconnectez-vous.', 'error');
+        e.target.value = '';
+        redirectToLogin();
+        return;
+    }
+
+    const name = (currentAuthUser.name || currentAuthUser.username || '').trim();
+    if (!name) {
+        showToast('Profil utilisateur invalide.', 'error');
         e.target.value = '';
         return;
     }
 
-    const email = document.getElementById('uploaderEmail').value.trim();
+    const email = (currentAuthUser.email || '').trim();
     const comment = document.getElementById('uploaderComment').value.trim();
 
-    addFilesToCurrentFolder(Array.from(files), { name: name.trim(), email, comment });
+    addFilesToFolder(Array.from(files), { name, email, comment }, currentFolderId);
     showToast(`${files.length} fichier(s) uploadé(s)`, 'success');
     e.target.value = '';
     displayFiles();
 }
 
 function addFilesToCurrentFolder(files, uploader) {
-    const folder = getCurrentFolder();
+    addFilesToFolder(files, uploader, currentFolderId);
+}
+
+function addFilesToFolder(files, uploader, folderId) {
+    const folder = fileSystemData.nodes[folderId];
     if (!folder || folder.type !== 'folder') return;
 
     const now = new Date();
@@ -422,7 +524,7 @@ function addFilesToCurrentFolder(files, uploader) {
             uploadDate: now.toLocaleDateString('fr-FR'),
             uploadTime: now.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
             timestamp: now.getTime(),
-            parentId: currentFolderId
+            parentId: folderId
         };
         fileSystemData.nodes[node.id] = node;
         folder.children.push(node.id);
@@ -433,22 +535,10 @@ function addFilesToCurrentFolder(files, uploader) {
 }
 
 // ===========================
-// AVATAR LIVE
-// ===========================
-function updateAvatarFromName() {
-    const name = document.getElementById('uploaderName').value.trim();
-    const initials = name
-        ? name.split(' ').filter(Boolean).map(w => w[0].toUpperCase()).slice(0, 2).join('')
-        : '–';
-    document.getElementById('userInitials').textContent = initials;
-    document.getElementById('userName').textContent = name || 'Utilisateur';
-    document.getElementById('userRole').textContent = name ? 'Déposant actif' : 'Invité';
-}
-
-// ===========================
 // EXPLORATEUR
 // ===========================
 function displayFiles() {
+    populateUploadFolderSelect();
     renderBreadcrumb();
     applyFilters();
     updateCurrentFolderHints();
@@ -492,7 +582,11 @@ function getFolderPath(folderId) {
 }
 
 function updateCurrentFolderHints() {
-    const pathText = getFolderPath(currentFolderId).map(p => p.name).join(' / ');
+    const selectedFolderId = document.getElementById('uploadTargetFolder')?.value || currentFolderId;
+    const path = getFolderPath(selectedFolderId);
+    const pathText = (path.length ? path : getFolderPath(fileSystemData.rootId || 'root'))
+        .map(p => p.name)
+        .join(' / ');
     const el = document.getElementById('currentUploadFolder');
     if (el) el.innerHTML = `Dossier cible : <strong>${pathText}</strong>`;
 }
@@ -581,6 +675,7 @@ function viewFileDetails(fileId) {
 function createItemRow(item) {
     const tr = document.createElement('tr');
     const isFolder = item.type === 'folder';
+    if (isFolder) tr.classList.add('folder-row');
 
     const ext = isFolder ? '' : item.extension || '?';
     const color = isFolder ? '' : getFileColor(item.fileType);
@@ -591,6 +686,7 @@ function createItemRow(item) {
         ? `<button class="folder-btn" onclick="openFolder('${item.id}')">
                <span class="folder-btn-icon">📁</span>
                ${escapeHtml(item.name)}
+               <span class="folder-chip">Dossier</span>
            </button>`
         : `<div class="file-name-cell">
                <div class="file-icon-sm" style="background:${color}">${escapeHtml(ext.slice(0,4))}</div>
@@ -604,12 +700,13 @@ function createItemRow(item) {
         : `${item.uploadDate}`;
 
     tr.innerHTML = `
-        <td>${nameCell}</td>
-        <td><span class="badge ${badgeClass}">${badgeLabel}</span></td>
-        <td style="color:var(--muted)">${size}</td>
-        <td>${user}</td>
-        <td style="color:var(--muted)">${date}</td>
-        <td class="actions-cell">
+        <td data-label="Nom" class="cell-name">${nameCell}</td>
+        <td data-label="Type"><span class="badge ${badgeClass}">${badgeLabel}</span></td>
+        <td data-label="Taille" class="cell-muted">${size}</td>
+        <td data-label="Déposé par">${user}</td>
+        <td data-label="Date" class="cell-muted">${date}</td>
+        <td data-label="Actions" class="actions-cell">
+            <button class="action-btn mobile-info-btn" onclick="showItemInfoModal('${item.id}')">Infos</button>
             ${isFolder
                 ? `<button class="action-btn" onclick="openFolder('${item.id}')">Ouvrir</button>`
                 : `<button class="action-btn" onclick="viewFileDetails('${item.id}')">Détails</button>`
@@ -677,8 +774,9 @@ function applyFilters() {
     }
 
     items.sort((a, b) => {
+        if (a.type !== b.type) return a.type === 'folder' ? -1 : 1;
+
         if (sort === 'name') {
-            if (a.type !== b.type) return a.type === 'folder' ? -1 : 1;
             return a.name.localeCompare(b.name, 'fr');
         }
         const tA = a.type === 'folder' ? a.createdAt : a.timestamp;
@@ -704,6 +802,102 @@ function applyFilters() {
         empty.classList.remove('show');
         items.forEach(item => tbody.appendChild(createItemRow(item)));
     }
+}
+
+function populateUploadFolderSelect(preferredFolderId = null) {
+    const hiddenInput = document.getElementById('uploadTargetFolder');
+    const label = document.getElementById('uploadFolderPickerLabel');
+    const tree = document.getElementById('uploadFolderTree');
+    if (!hiddenInput || !label || !tree) return;
+
+    const rootId = fileSystemData.rootId || 'root';
+    const currentValue = preferredFolderId || hiddenInput.value || currentFolderId || rootId;
+    const selectedFolder = fileSystemData.nodes[currentValue]?.type === 'folder' ? currentValue : rootId;
+
+    hiddenInput.value = selectedFolder;
+    ensureUploadTreePathExpanded(selectedFolder);
+
+    const path = getFolderPath(selectedFolder).map(folder => folder.name).join(' / ');
+    label.textContent = path || 'Racine';
+
+    tree.innerHTML = '';
+    renderUploadFolderTreeNode(rootId, 0, selectedFolder, tree);
+}
+
+function renderUploadFolderTreeNode(folderId, level, selectedFolderId, container) {
+    const folder = fileSystemData.nodes[folderId];
+    if (!folder || folder.type !== 'folder') return;
+
+    const children = getFolderChildrenSorted(folderId);
+    const hasChildren = children.length > 0;
+    const isExpanded = expandedUploadFolderIds.has(folderId);
+    const isSelected = folderId === selectedFolderId;
+
+    const row = document.createElement('div');
+    row.className = `folder-tree-row${isSelected ? ' selected' : ''}`;
+    row.style.setProperty('--level', String(level));
+
+    const toggle = document.createElement('button');
+    toggle.type = 'button';
+    toggle.className = `folder-tree-toggle${hasChildren ? '' : ' empty'}${isExpanded ? ' expanded' : ''}`;
+    toggle.setAttribute('aria-label', hasChildren ? 'Déplier/Replier le dossier' : 'Aucun sous-dossier');
+    toggle.innerHTML = hasChildren ? '▶' : '';
+    toggle.disabled = !hasChildren;
+    toggle.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (!hasChildren) return;
+        if (expandedUploadFolderIds.has(folderId)) {
+            expandedUploadFolderIds.delete(folderId);
+        } else {
+            expandedUploadFolderIds.add(folderId);
+        }
+        populateUploadFolderSelect(selectedFolderId);
+    });
+
+    const itemButton = document.createElement('button');
+    itemButton.type = 'button';
+    itemButton.className = 'folder-tree-item';
+    itemButton.innerHTML = `<span class="folder-tree-icon">📁</span><span class="folder-tree-name">${escapeHtml(folder.name)}</span>`;
+    itemButton.addEventListener('click', () => {
+        const hiddenInput = document.getElementById('uploadTargetFolder');
+        const picker = document.getElementById('uploadFolderPicker');
+        const pickerButton = document.getElementById('uploadFolderPickerBtn');
+        if (!hiddenInput) return;
+        hiddenInput.value = folderId;
+        ensureUploadTreePathExpanded(folderId);
+        populateUploadFolderSelect(folderId);
+        updateCurrentFolderHints();
+        if (picker && pickerButton) {
+            picker.classList.remove('open');
+            pickerButton.setAttribute('aria-expanded', 'false');
+        }
+    });
+
+    row.appendChild(toggle);
+    row.appendChild(itemButton);
+    container.appendChild(row);
+
+    if (!hasChildren || !isExpanded) return;
+
+    children.forEach(child => {
+        renderUploadFolderTreeNode(child.id, level + 1, selectedFolderId, container);
+    });
+}
+
+function getFolderChildrenSorted(folderId) {
+    const folder = fileSystemData.nodes[folderId];
+    if (!folder || folder.type !== 'folder') return [];
+
+    return (folder.children || [])
+        .map(id => fileSystemData.nodes[id])
+        .filter(node => node && node.type === 'folder')
+        .sort((a, b) => a.name.localeCompare(b.name, 'fr'));
+}
+
+function ensureUploadTreePathExpanded(folderId) {
+    const path = getFolderPath(folderId);
+    path.forEach(folder => expandedUploadFolderIds.add(folder.id));
 }
 
 // ===========================
@@ -874,12 +1068,7 @@ function migrateLegacyData(legacyFiles) {
 }
 
 function updateFilesCount() {
-    const total = Object.values(fileSystemData.nodes).filter(n => n.type === 'file').length;
-    document.getElementById('totalFiles').textContent = total;
-    const navCount = document.getElementById('navCount');
-    const mobileBadge = document.getElementById('mobileBadge');
-    if (navCount) navCount.textContent = total;
-    if (mobileBadge) mobileBadge.textContent = total;
+    return Object.values(fileSystemData.nodes).filter(n => n.type === 'file').length;
 }
 
 // ===========================
@@ -890,3 +1079,4 @@ window.openFolder = openFolder;
 window.renameItem = renameItem;
 window.deleteItem = deleteItem;
 window.viewFileDetails = viewFileDetails;
+window.showItemInfoModal = showItemInfoModal;
