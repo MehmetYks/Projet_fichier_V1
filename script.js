@@ -3,7 +3,7 @@
 // ===========================
 const STORAGE_KEY = 'filedesk_v2';
 const LEGACY_STORAGE_KEY = 'uploadedFiles';
-const AUTH_STORAGE_KEY = 'fleursville_current_user';
+const AUTH_STORAGE_KEY = 'filedesk_current_user';
 const AUTH_CACHE_KEY = 'filedesk_current_user_cache';
 const API_BASE_URL = (window.AppConfig && window.AppConfig.apiBaseUrl) || 'http://localhost:3000';
 

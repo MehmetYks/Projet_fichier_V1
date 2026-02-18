@@ -13,7 +13,6 @@ app.get('/api/health', (_req, res) => {
   res.json({ ok: true });
 });
 
-// Same login principle as calendrier-ditib-v1-test
 app.post('/api/login', async (req, res) => {
   try {
     const { username, password } = req.body || {};
