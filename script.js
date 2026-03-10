@@ -6,6 +6,102 @@ const LEGACY_STORAGE_KEY = 'uploadedFiles';
 const AUTH_STORAGE_KEY = 'filedesk_current_user';
 const AUTH_CACHE_KEY = 'filedesk_current_user_cache';
 const API_BASE_URL = (window.AppConfig && window.AppConfig.apiBaseUrl) || 'http://localhost:3000';
+const LANGUAGE_STORAGE_KEY = 'filedesk_lang';
+
+const I18N = {
+    fr: {
+        'app.title': 'FileDesk — Plateforme de depot',
+        'nav.main': 'Principal',
+        'nav.upload': 'Deposer',
+        'nav.explorer': 'Explorateur',
+        'nav.history': 'Historique',
+        'nav.users': 'Utilisateurs',
+        'nav.groups': 'Groupes',
+        'nav.followUsers': 'Suivi Utilisateurs',
+        'sidebar.language': 'Langue',
+        'sidebar.logout': 'Se deconnecter',
+        'view.history.title': 'Historique',
+        'view.users.title': 'Gestion des utilisateurs',
+        'view.users.addUser': 'Ajouter utilisateur',
+        'view.groups.title': 'Gestion des groupes',
+        'view.groups.formTitle': 'Formulaire groupe',
+        'view.follow.title': 'Suivi des utilisateurs',
+        'label.role.admin': 'Gorevli',
+        'label.role.user': 'Utilisateur',
+        'action.edit': 'Modifier',
+        'action.delete': 'Supprimer',
+        'action.open': 'Ouvrir',
+        'action.view': 'Voir',
+        'action.download': 'Telecharger',
+        'action.viewDesk': 'Voir bureau',
+        'action.viewMembers': 'Voir membres',
+        'desk.parent': 'Dossier parent',
+        'desk.folder': 'Dossier',
+        'desk.file': 'Fichier'
+    },
+    tr: {
+        'app.title': 'FileDesk — Dosya Yukleme Platformu',
+        'nav.main': 'Ana Menu',
+        'nav.upload': 'Yukle',
+        'nav.explorer': 'Dosya Gezgini',
+        'nav.history': 'Gecmis',
+        'nav.users': 'Kullanicilar',
+        'nav.groups': 'Gruplar',
+        'nav.followUsers': 'Kullanici Takibi',
+        'sidebar.language': 'Dil',
+        'sidebar.logout': 'Cikis Yap',
+        'view.history.title': 'Gecmis',
+        'view.users.title': 'Kullanici Yonetimi',
+        'view.users.addUser': 'Kullanici Ekle',
+        'view.groups.title': 'Grup Yonetimi',
+        'view.groups.formTitle': 'Grup Formu',
+        'view.follow.title': 'Kullanici Takibi',
+        'label.role.admin': 'Gorevli',
+        'label.role.user': 'Kullanici',
+        'action.edit': 'Duzenle',
+        'action.delete': 'Sil',
+        'action.open': 'Ac',
+        'action.view': 'Gor',
+        'action.download': 'Indir',
+        'action.viewDesk': 'Masaustunu gor',
+        'action.viewMembers': 'Uyeleri gor',
+        'desk.parent': 'Ust klasor',
+        'desk.folder': 'Klasor',
+        'desk.file': 'Dosya'
+    }
+};
+
+function getCurrentLanguage() {
+    const saved = localStorage.getItem(LANGUAGE_STORAGE_KEY);
+    return saved === 'tr' ? 'tr' : 'fr';
+}
+
+function t(key) {
+    const lang = getCurrentLanguage();
+    return I18N[lang]?.[key] || I18N.fr[key] || key;
+}
+
+function applyStaticTranslations() {
+    const lang = getCurrentLanguage();
+    document.documentElement.lang = lang;
+    document.querySelectorAll('[data-i18n]').forEach((el) => {
+        const key = el.getAttribute('data-i18n');
+        if (!key) return;
+        el.textContent = t(key);
+    });
+    document.title = t('app.title');
+}
+
+function initLanguageSwitcher() {
+    const select = document.getElementById('languageSelect');
+    if (!select) return;
+    select.value = getCurrentLanguage();
+    select.addEventListener('change', () => {
+        const next = select.value === 'tr' ? 'tr' : 'fr';
+        localStorage.setItem(LANGUAGE_STORAGE_KEY, next);
+        window.location.reload();
+    });
+}
 
 let selectedFiles = [];
 let fileSystemData = createDefaultFileSystem();
@@ -16,12 +112,17 @@ let adminUsers = [];
 let adminGroups = [];
 let selectedFollowUserId = null;
 let selectedFollowDesk = null;
+let selectedFollowDeskFolderId = 'root';
 let followSelectionMode = 'users';
 let selectedFollowGroupId = null;
 let followSelectionRequestId = 0;
 let deskSyncTimer = null;
 let adminGroupFormMemberIds = [];
 let adminGroupEditMemberIds = [];
+
+const INLINE_PREVIEW_MIME_PREFIXES = ['image/', 'text/'];
+const INLINE_PREVIEW_MIME_EXACT = new Set(['application/pdf', 'application/json']);
+const INLINE_PREVIEW_EXTENSIONS = new Set(['txt', 'md', 'csv', 'json', 'pdf', 'png', 'jpg', 'jpeg', 'gif', 'webp']);
 
 function getUserStorageKey(user) {
     return `${STORAGE_KEY}_${String(user?.id || 'guest')}`;
@@ -123,6 +224,9 @@ async function apiRequest(path, options = {}) {
 // INITIALISATION
 // ===========================
 document.addEventListener('DOMContentLoaded', async () => {
+    applyStaticTranslations();
+    initLanguageSwitcher();
+
     const isAuthenticated = await initAuth();
     if (!isAuthenticated) {
         return;
@@ -326,7 +430,7 @@ async function initAuth() {
 }
 
 function hydrateUserUI(user) {
-    const name = (user && user.name && user.name.trim()) || user.username || 'Utilisateur';
+    const name = (user && user.name && user.name.trim()) || user.username || t('label.role.user');
     const initials = name
         .split(' ')
         .filter(Boolean)
@@ -334,19 +438,13 @@ function hydrateUserUI(user) {
         .slice(0, 2)
         .join('') || 'U';
 
-    const roleMap = {
-        admin: 'Görevli',
-        alternant: 'Alternant',
-        salarie: 'Salarié'
-    };
-
     const initialsEl = document.getElementById('userInitials');
     const nameEl = document.getElementById('userName');
     const roleEl = document.getElementById('userRole');
 
     if (initialsEl) initialsEl.textContent = initials;
     if (nameEl) nameEl.textContent = name;
-    if (roleEl) roleEl.textContent = roleMap[user.role] || user.role || 'Utilisateur';
+    if (roleEl) roleEl.textContent = mapRoleLabel(user.role);
 }
 
 function bindLogout() {
@@ -392,6 +490,8 @@ function initModals() {
     document.getElementById('groupEditCancelBtn')?.addEventListener('click', closeGroupEditModal);
     document.getElementById('groupEditSaveBtn')?.addEventListener('click', handleAdminGroupEditSubmit);
     document.getElementById('groupEditModalBackdrop')?.addEventListener('click', closeGroupEditModal);
+    document.getElementById('followPreviewCloseBtn')?.addEventListener('click', closeFollowPreviewModal);
+    document.getElementById('followPreviewModalBackdrop')?.addEventListener('click', closeFollowPreviewModal);
 
     document.getElementById('groupMembersSearch')?.addEventListener('input', () => {
         const search = document.getElementById('groupMembersSearch').value;
@@ -411,18 +511,20 @@ function initModals() {
         });
     });
 
-    document.getElementById('groupMembersList')?.addEventListener('change', (event) => {
-        const target = event.target;
-        if (!(target instanceof HTMLInputElement) || target.type !== 'checkbox') return;
-        const userId = Number(target.value);
+    document.getElementById('groupMembersList')?.addEventListener('click', (event) => {
+        const button = event.target?.closest?.('button[data-member-action]');
+        if (!button) return;
+        const userId = Number(button.dataset.userId);
         if (!userId) return;
-        if (target.checked) {
+
+        if (button.dataset.memberAction === 'add') {
             if (!adminGroupFormMemberIds.includes(userId)) {
                 adminGroupFormMemberIds.push(userId);
             }
-        } else {
+        } else if (button.dataset.memberAction === 'remove') {
             adminGroupFormMemberIds = adminGroupFormMemberIds.filter(id => id !== userId);
         }
+
         renderGroupMemberInputs(adminGroupFormMemberIds, {
             containerId: 'groupMembersList',
             countId: 'groupMembersCount',
@@ -430,18 +532,20 @@ function initModals() {
         });
     });
 
-    document.getElementById('groupEditMembersList')?.addEventListener('change', (event) => {
-        const target = event.target;
-        if (!(target instanceof HTMLInputElement) || target.type !== 'checkbox') return;
-        const userId = Number(target.value);
+    document.getElementById('groupEditMembersList')?.addEventListener('click', (event) => {
+        const button = event.target?.closest?.('button[data-member-action]');
+        if (!button) return;
+        const userId = Number(button.dataset.userId);
         if (!userId) return;
-        if (target.checked) {
+
+        if (button.dataset.memberAction === 'add') {
             if (!adminGroupEditMemberIds.includes(userId)) {
                 adminGroupEditMemberIds.push(userId);
             }
-        } else {
+        } else if (button.dataset.memberAction === 'remove') {
             adminGroupEditMemberIds = adminGroupEditMemberIds.filter(id => id !== userId);
         }
+
         renderGroupMemberInputs(adminGroupEditMemberIds, {
             containerId: 'groupEditMembersList',
             countId: 'groupEditMembersCount',
@@ -454,6 +558,7 @@ function initModals() {
             closeSuccessModal();
             closeFolderModal();
             closeItemInfoModal();
+            closeFollowPreviewModal();
             closeUserEditModal();
             closeGroupEditModal();
         }
@@ -660,6 +765,105 @@ function closeItemInfoModal() {
     if (modal) modal.style.display = 'none';
 }
 
+function closeFollowPreviewModal() {
+    const modal = document.getElementById('followPreviewModal');
+    const body = document.getElementById('followPreviewBody');
+    if (body) body.innerHTML = '';
+    if (modal) modal.style.display = 'none';
+}
+
+function getFollowDeskFileNode(fileId) {
+    const desk = selectedFollowDesk;
+    if (!desk?.nodes) return null;
+    const node = desk.nodes[fileId];
+    if (!node || node.type !== 'file') return null;
+    return node;
+}
+
+function getInlineFileDataUrl(node) {
+    if (!node) return null;
+    const possible = [
+        node.dataUrl,
+        node.inlineDataUrl,
+        node.fileDataUrl,
+        node.previewDataUrl
+    ].filter(value => typeof value === 'string' && value.startsWith('data:'));
+    return possible[0] || null;
+}
+
+function getNodeMimeType(node) {
+    const value = String(node?.mimeType || '').trim().toLowerCase();
+    if (value) return value;
+    const type = String(node?.fileType || '').toLowerCase();
+    if (type === 'pdf') return 'application/pdf';
+    if (type === 'image') return 'image/*';
+    if (type === 'doc') return 'text/plain';
+    return '';
+}
+
+function previewFollowDeskFile(fileId) {
+    const node = getFollowDeskFileNode(fileId);
+    if (!node) return;
+
+    const title = document.getElementById('followPreviewTitle');
+    const body = document.getElementById('followPreviewBody');
+    const modal = document.getElementById('followPreviewModal');
+    if (!title || !body || !modal) return;
+
+    title.textContent = node.name || 'Aperçu du fichier';
+    const dataUrl = getInlineFileDataUrl(node);
+    const mimeType = getNodeMimeType(node);
+
+    if (dataUrl && mimeType.startsWith('image/')) {
+        body.innerHTML = `<img class="follow-preview-image" src="${dataUrl}" alt="${escapeHtml(node.name || 'Aperçu image')}">`;
+    } else if (dataUrl && mimeType === 'application/pdf') {
+        body.innerHTML = `<iframe class="follow-preview-frame" src="${dataUrl}" title="${escapeHtml(node.name || 'Aperçu PDF')}"></iframe>`;
+    } else {
+        body.innerHTML = `
+            <div class="follow-preview-fallback">
+                <p><strong>${escapeHtml(node.name || 'Fichier')}</strong></p>
+                <p>Type: ${escapeHtml(node.fileType || 'Inconnu')}</p>
+                <p>Taille: ${escapeHtml(formatFileSize(Number(node.fileSize) || 0))}</p>
+                <p>Prévisualisation détaillée indisponible pour ce fichier.</p>
+            </div>
+        `;
+    }
+
+    modal.style.display = 'flex';
+}
+
+function triggerBrowserDownload(filename, href) {
+    const a = document.createElement('a');
+    a.href = href;
+    a.download = filename || 'fichier';
+    a.rel = 'noopener';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+}
+
+function downloadFollowDeskFile(fileId) {
+    const node = getFollowDeskFileNode(fileId);
+    if (!node) return;
+
+    const dataUrl = getInlineFileDataUrl(node);
+    if (dataUrl) {
+        triggerBrowserDownload(node.name || 'fichier', dataUrl);
+        return;
+    }
+
+    const fallbackContent = [
+        `Nom: ${node.name || 'fichier'}`,
+        `Type: ${node.fileType || 'inconnu'}`,
+        `Taille: ${formatFileSize(Number(node.fileSize) || 0)}`,
+        `Date: ${node.uploadDate || '—'} ${node.uploadTime || ''}`.trim()
+    ].join('\n');
+    const blob = new Blob([fallbackContent], { type: 'text/plain;charset=utf-8' });
+    const objectUrl = URL.createObjectURL(blob);
+    triggerBrowserDownload(`${node.name || 'fichier'}-infos.txt`, objectUrl);
+    setTimeout(() => URL.revokeObjectURL(objectUrl), 1200);
+}
+
 function renderHistoryTable(uploads) {
     const tbody = document.getElementById('historyTableBody');
     const empty = document.getElementById('historyEmptyState');
@@ -716,17 +920,17 @@ function renderUsersTable() {
         const groups = (user.groups || []).map(g => (typeof g === 'string' ? g : g.name)).filter(Boolean).join(', ') || '—';
         const actionCell = isAdmin
             ? `<td class="actions-cell">
-                    <button class="action-btn" onclick="startUserEdit(${user.id})">Modifier</button>
-                    <button class="action-btn delete" onclick="removeUser(${user.id})">Supprimer</button>
+                    <button class="action-btn" onclick="startUserEdit(${user.id})">${escapeHtml(t('action.edit'))}</button>
+                    <button class="action-btn delete" onclick="removeUser(${user.id})">${escapeHtml(t('action.delete'))}</button>
                </td>`
             : '';
         const tr = document.createElement('tr');
         tr.innerHTML = `
-            <td>${escapeHtml(user.username)}</td>
-            <td>${escapeHtml(user.name || '—')}</td>
-            <td>${escapeHtml(user.email || '—')}</td>
+            <td class="cell-compact">${escapeHtml(user.username)}</td>
+            <td class="cell-compact cell-truncate" title="${escapeHtml(user.name || '—')}">${escapeHtml(user.name || '—')}</td>
+            <td class="cell-compact cell-truncate" title="${escapeHtml(user.email || '—')}">${escapeHtml(user.email || '—')}</td>
             <td><span class="badge ${mapRole(user.role) === 'admin' ? 'badge-pdf' : 'badge-other'}">${escapeHtml(mapRoleLabel(user.role))}</span></td>
-            <td>${escapeHtml(groups)}</td>
+            <td class="cell-compact cell-truncate" title="${escapeHtml(groups)}">${escapeHtml(groups)}</td>
             ${actionCell}
         `;
         tbody.appendChild(tr);
@@ -756,12 +960,12 @@ function renderGroupsTable() {
         const created = group.created_at ? new Date(group.created_at).toLocaleDateString('fr-FR') : '—';
         const tr = document.createElement('tr');
         tr.innerHTML = `
-            <td>${escapeHtml(group.name)}</td>
-            <td>${escapeHtml(created)}</td>
-            <td>${members} membre(s)</td>
+            <td class="cell-compact cell-truncate" title="${escapeHtml(group.name)}">${escapeHtml(group.name)}</td>
+            <td class="cell-compact">${escapeHtml(created)}</td>
+            <td class="cell-compact">${members} membre(s)</td>
             <td class="actions-cell">
-                <button class="action-btn" onclick="startGroupEdit(${group.id})">Modifier</button>
-                <button class="action-btn delete" onclick="removeGroup(${group.id})">Supprimer</button>
+                <button class="action-btn" onclick="startGroupEdit(${group.id})">${escapeHtml(t('action.edit'))}</button>
+                <button class="action-btn delete" onclick="removeGroup(${group.id})">${escapeHtml(t('action.delete'))}</button>
             </td>
         `;
             tbody.appendChild(tr);
@@ -799,16 +1003,12 @@ function renderFollowUsersTable(users = getTrackableFollowUsers()) {
     if (usersEmpty) usersEmpty.classList.remove('show');
 
     users.forEach(user => {
-        const groups = (user.groups || []).map(g => (typeof g === 'string' ? g : g.name)).filter(Boolean);
         const tr = document.createElement('tr');
-        const groupNames = groups.join(', ') || '—';
         tr.innerHTML = `
-            <td>${escapeHtml(user.username || '—')}</td>
-            <td>${escapeHtml(user.name || '—')}</td>
-            <td>${escapeHtml(user.email || '—')}</td>
-            <td>${escapeHtml(groupNames)}</td>
+            <td class="cell-truncate" title="${escapeHtml(user.username || '—')}">${escapeHtml(user.username || '—')}</td>
+            <td class="cell-truncate" title="${escapeHtml(user.name || '—')}">${escapeHtml(user.name || '—')}</td>
             <td class="actions-cell">
-                <button class="action-btn" onclick="openUserFollow(${user.id})">Voir bureau</button>
+                <button class="action-btn" onclick="openUserFollow(${user.id})">${escapeHtml(t('action.viewDesk'))}</button>
             </td>
         `;
         tbody.appendChild(tr);
@@ -857,16 +1057,12 @@ function renderFollowGroupsTable() {
             })
             .filter(Boolean);
 
-        const membersPreview = memberNames.length > 3
-            ? `${memberNames.slice(0, 3).join(', ')} et ${memberNames.length - 3} autre(s)`
-            : (memberNames.join(', ') || '—');
+        const groupLabel = `${group.name} (${memberCount} membre(s))`;
 
         tr.innerHTML = `
-            <td>${escapeHtml(group.name)}</td>
-            <td>${memberCount} membre(s)</td>
-            <td title="${escapeHtml(memberNames.join(', '))}">${escapeHtml(membersPreview)}</td>
+            <td class="cell-truncate" title="${escapeHtml(memberNames.join(', '))}">${escapeHtml(groupLabel)}</td>
             <td class="actions-cell">
-                <button class="action-btn" onclick="openGroupFollow(${group.id})">Voir membres</button>
+                <button class="action-btn" onclick="openGroupFollow(${group.id})">${escapeHtml(t('action.viewMembers'))}</button>
             </td>
         `;
         tbody.appendChild(tr);
@@ -1046,77 +1242,161 @@ function renderFollowDesk(deskData) {
     if (!tbody || !empty) return;
 
     const normalized = normalizeDeskData(deskData);
-    const rows = [];
     if (!normalized) {
+        selectedFollowDesk = null;
+        selectedFollowDeskFolderId = 'root';
+        const breadcrumb = document.getElementById('followDeskBreadcrumb');
+        if (breadcrumb) breadcrumb.innerHTML = '';
         empty.classList.add('show');
         tbody.innerHTML = '';
         return;
     }
 
-    walkDeskForFollow(normalized.nodes, normalized.rootId || 'root', [], rows, 0);
+    selectedFollowDesk = normalized;
+    selectedFollowDeskFolderId = normalized.rootId || 'root';
+    renderFollowDeskExplorer();
+}
+
+function renderFollowDeskExplorer() {
+    const tbody = document.getElementById('followDeskBody');
+    const empty = document.getElementById('followDeskEmptyState');
+    if (!tbody || !empty) return;
+
+    const desk = selectedFollowDesk;
+    if (!desk || !desk.nodes) {
+        empty.classList.add('show');
+        tbody.innerHTML = '';
+        return;
+    }
+
+    const currentFolder = desk.nodes[selectedFollowDeskFolderId];
+    if (!currentFolder || currentFolder.type !== 'folder') {
+        selectedFollowDeskFolderId = desk.rootId || 'root';
+    }
+    const folderNode = desk.nodes[selectedFollowDeskFolderId];
+    if (!folderNode || folderNode.type !== 'folder') {
+        empty.classList.add('show');
+        tbody.innerHTML = '';
+        return;
+    }
+
+    renderFollowDeskBreadcrumb();
+
+    const items = (folderNode.children || [])
+        .map(id => desk.nodes[id])
+        .filter(Boolean)
+        .sort((a, b) => {
+            if (a.type !== b.type) return a.type === 'folder' ? -1 : 1;
+            return String(a.name || '').localeCompare(String(b.name || ''), 'fr');
+        });
 
     tbody.innerHTML = '';
-    if (!rows.length) {
+    if (!items.length) {
         empty.classList.add('show');
         return;
     }
 
     empty.classList.remove('show');
-    rows.forEach(file => {
-        const rowClass = file.type === 'folder' ? 'folder-row' : '';
+    items.forEach(item => {
         const row = document.createElement('tr');
-        row.className = rowClass;
+        if (item.type === 'folder') {
+            row.className = 'folder-row';
+        }
+
+        const typeLabel = item.type === 'folder' ? t('desk.folder') : (item.fileType || t('desk.file'));
+        const badgeClass = item.type === 'folder' ? 'badge-folder' : getBadgeClass(item);
+        const size = item.type === 'folder' ? '—' : formatFileSize(Number(item.fileSize) || 0);
+        const timestamp = item.type === 'folder'
+            ? item.createdAt
+            : item.timestamp;
+        const dateLabel = timestamp ? new Date(timestamp).toLocaleDateString('fr-FR') : (item.uploadDate || '—');
+
+        const nameCell = item.type === 'folder'
+            ? `<button class="folder-btn" onclick="openFollowDeskFolder('${item.id}')">
+                    <span class="folder-btn-icon">📁</span>
+                    ${escapeHtml(item.name || t('desk.folder'))}
+               </button>`
+            : `<div class="file-name-cell">
+                    <div class="file-icon-sm" style="background:${getFileColor(item.fileType)}">${escapeHtml((item.extension || '?').slice(0, 4))}</div>
+                    ${escapeHtml(item.name || t('desk.file'))}
+               </div>`;
+
+        const actionsCell = item.type === 'folder'
+            ? `<button class="action-btn" onclick="openFollowDeskFolder('${item.id}')">${escapeHtml(t('action.open'))}</button>`
+            : `<button class="action-btn" onclick="previewFollowDeskFile('${item.id}')">${escapeHtml(t('action.view'))}</button>
+               <button class="action-btn" onclick="downloadFollowDeskFile('${item.id}')">${escapeHtml(t('action.download'))}</button>`;
+
         row.innerHTML = `
-            <td>${escapeHtml(file.name || '—')}</td>
-            <td>${escapeHtml(file.path || 'Racine')}</td>
-            <td>${escapeHtml(file.type === 'folder' ? 'Dossier' : 'Fichier')}</td>
-            <td>${formatFileSize(file.size || 0)}</td>
-            <td>${escapeHtml(file.date || '—')}</td>
+            <td class="cell-name">${nameCell}</td>
+            <td><span class="badge ${badgeClass}">${escapeHtml(typeLabel)}</span></td>
+            <td>${size}</td>
+            <td>${escapeHtml(dateLabel)}</td>
+            <td class="actions-cell">${actionsCell}</td>
         `;
         tbody.appendChild(row);
     });
 }
 
-function walkDeskForFollow(nodes, folderId, prefixPath, rows, level = 0) {
-    const folder = nodes[folderId];
+function openFollowDeskFolder(folderId) {
+    const desk = selectedFollowDesk;
+    if (!desk || !desk.nodes) return;
+    const folder = desk.nodes[folderId];
     if (!folder || folder.type !== 'folder') {
         return;
     }
+    selectedFollowDeskFolderId = folderId;
+    renderFollowDeskExplorer();
+}
 
-    const currentPath = [...prefixPath, folder.name].filter(Boolean);
-    const folderPath = currentPath.join(' / ') || 'Racine';
-    const children = Array.isArray(folder.children) ? folder.children : [];
+function openFollowDeskParentFolder() {
+    const desk = selectedFollowDesk;
+    if (!desk || !desk.nodes) return;
+    const currentFolder = desk.nodes[selectedFollowDeskFolderId];
+    const parentId = currentFolder?.parentId;
+    if (!parentId || !desk.nodes[parentId]) {
+        selectedFollowDeskFolderId = desk.rootId || 'root';
+    } else {
+        selectedFollowDeskFolderId = parentId;
+    }
+    renderFollowDeskExplorer();
+}
 
-    if (level >= 0) {
-        rows.push({
-            name: folder.name,
-            path: folderPath,
-            type: 'folder',
-            size: 0,
-            date: folder.createdAt ? new Date(folder.createdAt).toLocaleDateString('fr-FR') : '—'
-        });
+function renderFollowDeskBreadcrumb() {
+    const breadcrumb = document.getElementById('followDeskBreadcrumb');
+    const desk = selectedFollowDesk;
+    if (!breadcrumb || !desk || !desk.nodes) return;
+
+    const path = [];
+    let cursor = desk.nodes[selectedFollowDeskFolderId];
+    while (cursor) {
+        path.unshift(cursor);
+        if (!cursor.parentId) break;
+        cursor = desk.nodes[cursor.parentId];
     }
 
-    children.forEach((childId) => {
-        const child = nodes[childId];
-        if (!child) return;
-
-        if (child.type === 'folder') {
-            walkDeskForFollow(nodes, child.id, currentPath, rows, level + 1);
-        } else {
-            rows.push({
-                name: child.name,
-                path: folderPath,
-                type: 'file',
-                size: Number(child.fileSize) || 0,
-                date: child.timestamp ? new Date(child.timestamp).toLocaleDateString('fr-FR') : '—'
-            });
+    breadcrumb.innerHTML = '';
+    path.forEach((folder, index) => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = `follow-breadcrumb-item${index === path.length - 1 ? ' active' : ''}`;
+        btn.textContent = folder.name || 'Racine';
+        btn.addEventListener('click', () => {
+            if (index !== path.length - 1) {
+                openFollowDeskFolder(folder.id);
+            }
+        });
+        breadcrumb.appendChild(btn);
+        if (index < path.length - 1) {
+            const sep = document.createElement('span');
+            sep.className = 'follow-breadcrumb-sep';
+            sep.textContent = '/';
+            breadcrumb.appendChild(sep);
         }
     });
 }
 
 function mapRoleLabel(role) {
-    return mapRole(role) === 'admin' ? 'Görevli' : 'Utilisateur';
+    return mapRole(role) === 'admin' ? t('label.role.admin') : t('label.role.user');
 }
 
 function renderGroupMemberInputs(selectedUserIds = [], options = {}) {
@@ -1133,34 +1413,46 @@ function renderGroupMemberInputs(selectedUserIds = [], options = {}) {
     const normalizedSearch = search.toLowerCase().trim();
     const selected = new Set(selectedUserIds.map(id => Number(id)).filter(Boolean));
     const users = adminUsers
+        .filter(user => mapRole(user.role) !== 'admin')
         .slice()
         .sort((a, b) => {
             const aLabel = String(a.name || a.username || '').toLowerCase();
             const bLabel = String(b.name || b.username || '').toLowerCase();
             return aLabel.localeCompare(bLabel);
-        })
-        .filter(user => {
-            const label = `${user.name || ''} ${user.username || ''}`.toLowerCase();
-            return !normalizedSearch || label.includes(normalizedSearch);
         });
 
-    container.innerHTML = '';
-    if (!users.length) {
-        container.innerHTML = '<p class="group-members-empty">Aucun utilisateur disponible.</p>';
-    }
-    users.forEach(user => {
-        const checkboxId = `${containerId}-member-${user.id}`;
-        container.innerHTML += `
-            <label class="group-member-item">
-                <input type="checkbox" id="${checkboxId}" value="${user.id}" ${selected.has(Number(user.id)) ? 'checked' : ''}>
-                <span>${escapeHtml(user.name || user.username)}</span>
-            </label>
-        `;
+    const selectedUsers = users.filter(user => selected.has(Number(user.id)));
+    const availableUsers = users.filter(user => {
+        if (selected.has(Number(user.id))) return false;
+        const label = `${user.name || ''} ${user.username || ''} ${user.email || ''}`.toLowerCase();
+        return !normalizedSearch || label.includes(normalizedSearch);
     });
 
+    const selectedMarkup = selectedUsers.length
+        ? selectedUsers.map(user => `
+            <span class="group-member-chip">
+                <span class="group-member-chip-name">${escapeHtml(user.name || user.username)}</span>
+                <button type="button" class="group-member-chip-remove" data-member-action="remove" data-user-id="${user.id}" aria-label="Retirer ${escapeHtml(user.name || user.username)}">×</button>
+            </span>
+        `).join('')
+        : '<p class="group-members-empty">Aucun membre sélectionné.</p>';
+
+    const availableMarkup = availableUsers.length
+        ? availableUsers.map(user => `
+            <button type="button" class="group-member-option" data-member-action="add" data-user-id="${user.id}">
+                <span class="group-member-option-main">${escapeHtml(user.name || user.username)}</span>
+                <span class="group-member-option-sub">${escapeHtml(user.username)}${user.email ? ` • ${escapeHtml(user.email)}` : ''}</span>
+            </button>
+        `).join('')
+        : '<p class="group-members-empty">Aucun résultat.</p>';
+
+    container.innerHTML = `
+        <div class="group-members-selected">${selectedMarkup}</div>
+        <div class="group-members-options">${availableMarkup}</div>
+    `;
+
     if (countElement) {
-        const selectedCount = selectedUserIds.length;
-        countElement.textContent = `${selectedCount} membre(s)`;
+        countElement.textContent = `${selectedUsers.length} membre(s)`;
     }
 }
 
@@ -1334,7 +1626,13 @@ async function handleAdminGroupSubmit(e) {
     e.preventDefault();
     const idInput = document.getElementById('adminGroupId');
     const name = document.getElementById('adminGroupName').value.trim();
-    const checked = adminGroupFormMemberIds;
+    const allowedUserIds = new Set(
+        adminUsers
+            .filter(user => mapRole(user.role) !== 'admin')
+            .map(user => Number(user.id))
+            .filter(Boolean)
+    );
+    const checked = adminGroupFormMemberIds.filter(id => allowedUserIds.has(Number(id)));
 
     if (!name) {
         showToast('Nom de groupe requis', 'error');
@@ -1362,7 +1660,13 @@ async function handleAdminGroupSubmit(e) {
 async function handleAdminGroupEditSubmit() {
     const idInput = document.getElementById('adminGroupEditId');
     const name = document.getElementById('adminGroupEditName').value.trim();
-    const checked = adminGroupEditMemberIds;
+    const allowedUserIds = new Set(
+        adminUsers
+            .filter(user => mapRole(user.role) !== 'admin')
+            .map(user => Number(user.id))
+            .filter(Boolean)
+    );
+    const checked = adminGroupEditMemberIds.filter(id => allowedUserIds.has(Number(id)));
 
     if (!idInput?.value) {
         showToast('Sélectionnez un groupe à modifier.', 'error');
@@ -1412,7 +1716,13 @@ async function startGroupEdit(groupId) {
     editIdInput.value = String(group.id);
     editNameInput.value = group.name || '';
 
-    const members = (group.members || []).map(member => Number(member.id || member)).filter(Boolean);
+    const members = (group.members || [])
+        .map(member => Number(member.id || member))
+        .filter(Boolean)
+        .filter(memberId => {
+            const user = adminUsers.find(item => Number(item.id) === Number(memberId));
+            return user && mapRole(user.role) !== 'admin';
+        });
     adminGroupEditMemberIds = Array.from(new Set(members));
     renderGroupMemberInputs(adminGroupEditMemberIds, {
         containerId: 'groupEditMembersList',
@@ -1581,7 +1891,7 @@ function clearAllFiles() {
 // ===========================
 // SOUMISSION
 // ===========================
-function handleSubmit() {
+async function handleSubmit() {
     if (selectedFiles.length === 0) {
         showToast('Sélectionnez au moins un fichier', 'error');
         return;
@@ -1599,7 +1909,7 @@ function handleSubmit() {
     const targetFolderId = document.getElementById('uploadTargetFolder').value || currentFolderId;
     const targetFolderPath = getFolderPathName(targetFolderId);
 
-    addFilesToFolder(selectedFiles, { name, email, comment }, targetFolderId);
+    await addFilesToFolder(selectedFiles, { name, email, comment }, targetFolderId);
     recordUploadsToServer(selectedFiles, comment, targetFolderPath);
     showSuccessModal(selectedFiles.length);
     resetUploadForm();
@@ -1612,7 +1922,7 @@ function resetUploadForm() {
     document.getElementById('uploadedFilesPreview').style.display = 'none';
 }
 
-function handleExplorerUpload(e) {
+async function handleExplorerUpload(e) {
     const files = e.target.files;
     if (!files || files.length === 0) return;
 
@@ -1634,15 +1944,15 @@ function handleExplorerUpload(e) {
     const comment = document.getElementById('uploaderComment').value.trim();
     const targetFolderPath = getFolderPathName(currentFolderId);
 
-    addFilesToFolder(Array.from(files), { name, email, comment }, currentFolderId);
+    await addFilesToFolder(Array.from(files), { name, email, comment }, currentFolderId);
     showToast(`${files.length} fichier(s) uploadé(s)`, 'success');
     recordUploadsToServer(Array.from(files), comment, targetFolderPath);
     e.target.value = '';
     displayFiles();
 }
 
-function addFilesToCurrentFolder(files, uploader) {
-    addFilesToFolder(files, uploader, currentFolderId);
+async function addFilesToCurrentFolder(files, uploader) {
+    await addFilesToFolder(files, uploader, currentFolderId);
 }
 
 function getFolderPathName(folderId) {
@@ -1667,13 +1977,14 @@ function recordUploadsToServer(files, comment, folderPath) {
     });
 }
 
-function addFilesToFolder(files, uploader, folderId) {
+async function addFilesToFolder(files, uploader, folderId) {
     const folder = fileSystemData.nodes[folderId];
     if (!folder || folder.type !== 'folder') return;
 
     const now = new Date();
-    files.forEach(file => {
+    for (const file of files) {
         const ext = getFileExtension(file.name);
+        const inlinePreview = await readFileForInlinePreview(file, ext);
         const node = {
             id: generateId(),
             type: 'file',
@@ -1681,6 +1992,8 @@ function addFilesToFolder(files, uploader, folderId) {
             extension: ext,
             fileType: getFileType(ext),
             fileSize: file.size,
+            mimeType: file.type || null,
+            dataUrl: inlinePreview,
             uploaderName: uploader.name,
             uploaderEmail: uploader.email || '',
             comment: uploader.comment || '',
@@ -1691,10 +2004,40 @@ function addFilesToFolder(files, uploader, folderId) {
         };
         fileSystemData.nodes[node.id] = node;
         folder.children.push(node.id);
-    });
+    }
 
     saveFiles();
     updateFilesCount();
+}
+
+function shouldStoreInlinePreview(file, extension) {
+    if (!file || !Number.isFinite(file.size) || file.size <= 0) return false;
+    if (file.size > 8 * 1024 * 1024) return false;
+    const mimeType = String(file.type || '').toLowerCase();
+    const ext = String(extension || '').toLowerCase();
+    if (INLINE_PREVIEW_MIME_EXACT.has(mimeType)) return true;
+    if (INLINE_PREVIEW_MIME_PREFIXES.some(prefix => mimeType.startsWith(prefix))) return true;
+    return INLINE_PREVIEW_EXTENSIONS.has(ext);
+}
+
+async function readFileForInlinePreview(file, extension) {
+    if (!shouldStoreInlinePreview(file, extension)) {
+        return null;
+    }
+    try {
+        return await readFileAsDataUrl(file);
+    } catch (error) {
+        return null;
+    }
+}
+
+function readFileAsDataUrl(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result || ''));
+        reader.onerror = () => reject(reader.error || new Error('Lecture fichier impossible'));
+        reader.readAsDataURL(file);
+    });
 }
 
 // ===========================
@@ -2250,3 +2593,7 @@ window.removeUser = removeUser;
 window.startGroupEdit = startGroupEdit;
 window.removeGroup = removeGroup;
 window.openUserFollow = openUserFollow;
+window.openFollowDeskFolder = openFollowDeskFolder;
+window.openFollowDeskParentFolder = openFollowDeskParentFolder;
+window.previewFollowDeskFile = previewFollowDeskFile;
+window.downloadFollowDeskFile = downloadFollowDeskFile;
