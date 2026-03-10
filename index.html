@@ -58,6 +58,45 @@
                 </span>
                 <span class="nav-text">Explorateur</span>
             </button>
+            <button class="nav-item" data-view="history">
+                <span class="nav-icon">
+                    <svg width="16" height="16" viewBox="0 0 20 20" fill="none">
+                        <path d="M2 10h16" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/>
+                        <path d="M3 5h14" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/>
+                        <path d="M4 15h12" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/>
+                    </svg>
+                </span>
+                <span class="nav-text">Historique</span>
+            </button>
+            <button class="nav-item admin-only" data-admin-only="true" data-view="users">
+                <span class="nav-icon">
+                    <svg width="16" height="16" viewBox="0 0 20 20" fill="none">
+                        <path d="M10 10a3 3 0 100-6 3 3 0 000 6z" stroke="currentColor" stroke-width="1.75"/>
+                        <path d="M2 17a8 8 0 0116 0" stroke="currentColor" stroke-width="1.75"/>
+                        <path d="M4 5.5C4 3.6 5.8 2 7.9 2S12 3.6 12 5.5v0" stroke="currentColor" stroke-width="1.75" fill="none"/>
+                    </svg>
+                </span>
+                <span class="nav-text">Utilisateurs</span>
+            </button>
+            <button class="nav-item admin-only" data-admin-only="true" data-view="groups">
+                <span class="nav-icon">
+                    <svg width="16" height="16" viewBox="0 0 20 20" fill="none">
+                        <circle cx="8" cy="9" r="3.4" stroke="currentColor" stroke-width="1.75"/>
+                        <path d="M13 7h5M15.5 4.5v5" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/>
+                        <path d="M2 16a6 6 0 0114 0" stroke="currentColor" stroke-width="1.75"/>
+                    </svg>
+                </span>
+                <span class="nav-text">Groupes</span>
+            </button>
+            <button class="nav-item admin-only" data-admin-only="true" data-view="follow">
+                <span class="nav-icon">
+                    <svg width="16" height="16" viewBox="0 0 20 20" fill="none">
+                        <path d="M3 5h14M3 10h10M3 15h14M1 4a1 1 0 011-1h2a1 1 0 011 1m2 0H16a1 1 0 011 1v10a1 1 0 01-1 1H4" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/>
+                        <path d="M13 10l3 1.5V15" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/>
+                    </svg>
+                </span>
+                <span class="nav-text">Suivi Utilisateurs</span>
+            </button>
         </nav>
 
         <div class="sidebar-footer">
@@ -250,6 +289,279 @@
                 </div>
             </div>
         </section>
+
+        <!-- History View -->
+        <section id="historyView" class="view-section">
+            <div class="view-inner">
+                <div class="page-hero">
+                    <div class="page-hero-text">
+                        <h2>Historique</h2>
+                        <p>Tous les fichiers déposés par votre compte</p>
+                    </div>
+                </div>
+                <div class="table-wrap">
+                    <table class="files-table">
+                        <thead>
+                            <tr>
+                                <th>Nom</th>
+                                <th>Type</th>
+                                <th>Taille</th>
+                                <th>Dossier</th>
+                                <th>Date</th>
+                            </tr>
+                        </thead>
+                        <tbody id="historyTableBody"></tbody>
+                    </table>
+                    <div id="historyEmptyState" class="empty-state">
+                        <div class="empty-icon">
+                            <svg width="40" height="40" viewBox="0 0 48 48" fill="none">
+                                <rect x="10" y="12" width="28" height="24" rx="3" stroke="currentColor" stroke-width="1.5"/>
+                                <path d="M16 20h16M16 24h12M16 28h8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                            </svg>
+                        </div>
+                        <p class="empty-title">Aucun dépôt</p>
+                        <p class="empty-sub">Les nouveaux dépôts apparaîtront ici.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Users View -->
+        <section id="usersView" class="view-section">
+            <div class="view-inner">
+                <div class="page-hero">
+                    <div class="page-hero-text">
+                        <h2>Gestion des utilisateurs</h2>
+                        <p>Créer, modifier et supprimer les comptes</p>
+                    </div>
+                </div>
+
+                <div class="admin-grid">
+                    <div class="card form-card">
+                        <div class="card-title-row">
+                            <div class="card-dot accent"></div>
+                            <h3>Ajouter utilisateur</h3>
+                        </div>
+                        <form id="adminUserForm" novalidate>
+                            <input type="hidden" id="adminUserId">
+                            <div class="form-group">
+                                <label for="adminUserUsername">Identifiant</label>
+                                <input type="text" id="adminUserUsername" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="adminUserPassword">Mot de passe</label>
+                                <input type="password" id="adminUserPassword" placeholder="Laisser vide pour ne pas modifier">
+                            </div>
+                            <div class="form-group">
+                                <label for="adminUserName">Nom</label>
+                                <input type="text" id="adminUserName">
+                            </div>
+                            <div class="form-group">
+                                <label for="adminUserEmail">Email</label>
+                                <input type="email" id="adminUserEmail">
+                            </div>
+                            <div class="form-group">
+                                <label for="adminUserRole">Rôle</label>
+                                <select id="adminUserRole" class="sel">
+                                    <option value="user">Utilisateur normal</option>
+                                    <option value="admin">Görevli (admin)</option>
+                                </select>
+                            </div>
+                            <div class="form-actions-row">
+                                <button class="btn-accent" type="submit">Enregistrer</button>
+                                <button class="btn-ghost" type="button" id="adminUserResetBtn">Annuler</button>
+                            </div>
+                        </form>
+                    </div>
+                    <div class="table-wrap admin-table-wrap">
+                        <table class="files-table">
+                            <thead>
+                                <tr>
+                                    <th>Identifiant</th>
+                                    <th>Nom</th>
+                                    <th>Email</th>
+                                    <th>Rôle</th>
+                                    <th>Groupes</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="usersTableBody"></tbody>
+                        </table>
+                        <div id="usersEmptyState" class="empty-state">
+                            <p class="empty-sub">Aucun utilisateur pour le moment.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Groups View -->
+        <section id="groupsView" class="view-section">
+            <div class="view-inner">
+                <div class="page-hero">
+                    <div class="page-hero-text">
+                        <h2>Gestion des groupes</h2>
+                        <p>Créer et affecter des utilisateurs aux groupes</p>
+                    </div>
+                </div>
+
+                <div class="admin-grid">
+                    <div class="card form-card">
+                        <div class="card-title-row">
+                            <div class="card-dot"></div>
+                            <h3>Formulaire groupe</h3>
+                        </div>
+                        <form id="adminGroupForm" novalidate>
+                            <input type="hidden" id="adminGroupId">
+                            <div class="form-group">
+                                <label for="adminGroupName">Nom du groupe</label>
+                                <input type="text" id="adminGroupName" required>
+                            </div>
+                            <div class="form-group">
+                                <label>Membres</label>
+                                <div class="group-members-toolbar">
+                                    <span id="groupMembersCount" class="group-members-count">0 membre(s)</span>
+                                    <input type="text" id="groupMembersSearch" class="group-members-search" placeholder="Rechercher un utilisateur..." autocomplete="off">
+                                </div>
+                                <div id="groupMembersList" class="group-members-list"></div>
+                            </div>
+                            <div class="form-actions-row">
+                                <button class="btn-accent" type="submit">Enregistrer</button>
+                                <button class="btn-ghost" type="button" id="adminGroupResetBtn">Annuler</button>
+                            </div>
+                        </form>
+                    </div>
+                    <div class="table-wrap admin-table-wrap">
+                        <table class="files-table">
+                            <thead>
+                                <tr>
+                                    <th>Groupe</th>
+                                    <th>Créé le</th>
+                                    <th>Membres</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="groupsTableBody"></tbody>
+                        </table>
+                        <div id="groupsEmptyState" class="empty-state">
+                            <p class="empty-sub">Aucun groupe créé.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Follow View -->
+        <section id="followView" class="view-section">
+            <div class="view-inner">
+                <div class="page-hero">
+                    <div class="page-hero-text">
+                        <h2>Suivi des utilisateurs</h2>
+                        <p>Voir le bureau (dépôts) et l'historique d'un utilisateur</p>
+                    </div>
+                </div>
+
+                <div class="admin-grid">
+                    <div class="follow-left-column">
+                        <div class="table-wrap admin-table-wrap">
+                            <div class="follow-subtitle">Utilisateurs</div>
+                            <table class="files-table">
+                                <thead>
+                                    <tr>
+                                        <th>Identifiant</th>
+                                        <th>Nom</th>
+                                        <th>Email</th>
+                                        <th>Groupe(s)</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="followUsersBody"></tbody>
+                            </table>
+                            <div id="followUsersEmptyState" class="empty-state">
+                                <p class="empty-sub">Aucun utilisateur à suivre.</p>
+                            </div>
+                        </div>
+                        <div class="table-wrap admin-table-wrap">
+                            <div class="follow-subtitle">Groupes</div>
+                            <table class="files-table">
+                                <thead>
+                                    <tr>
+                                        <th>Groupe</th>
+                                        <th>Nombre</th>
+                                        <th>Membres</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="followGroupsBody"></tbody>
+                            </table>
+                            <div id="followGroupsEmptyState" class="empty-state">
+                                <p class="empty-sub">Aucun groupe pour le moment.</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card form-card">
+                        <div class="card-title-row">
+                            <div class="card-dot accent"></div>
+                            <h3 id="followUserTitle">Aucun utilisateur sélectionné</h3>
+                        </div>
+                        <div id="followScopeRow" class="follow-scope-row">
+                            <span id="followScopeLabel" class="follow-scope-label">Aucun filtre de groupe actif.</span>
+                            <button class="btn-ghost btn-sm" id="followClearScopeBtn" type="button" style="display: none;">Voir tous les utilisateurs</button>
+                        </div>
+                        <p id="followUserMeta" class="follow-meta">Sélectionnez un utilisateur pour voir son bureau et son historique.</p>
+                        <div>
+                            <div class="card form-card">
+                                <div class="card-title-row">
+                                    <div class="card-dot"></div>
+                                    <h3>Bureau</h3>
+                                </div>
+                                <div class="table-wrap">
+                                    <table class="files-table">
+                                        <thead>
+                                            <tr>
+                                                <th>Nom</th>
+                                                <th>Emplacement</th>
+                                                <th>Type</th>
+                                                <th>Taille</th>
+                                                <th>Date</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="followDeskBody"></tbody>
+                                    </table>
+                                    <div id="followDeskEmptyState" class="empty-state">
+                                        <p class="empty-sub">Aucun élément dans le bureau.</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="card form-card" style="margin-top: 1rem;">
+                                <div class="card-title-row">
+                                    <div class="card-dot accent"></div>
+                                    <h3>Historique des dépôts</h3>
+                                </div>
+                                <div class="table-wrap">
+                                    <table class="files-table">
+                                        <thead>
+                                            <tr>
+                                                <th>Fichier</th>
+                                                <th>Type</th>
+                                                <th>Taille</th>
+                                                <th>Dossier</th>
+                                                <th>Date</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="followHistoryBody"></tbody>
+                                    </table>
+                                    <div id="followEmptyState" class="empty-state">
+                                        <p class="empty-sub">Sélectionnez un utilisateur.</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
     </main>
 
     <!-- Toast -->
@@ -299,6 +611,73 @@
             <div id="itemInfoBody" class="item-info-body"></div>
             <div class="modal-actions">
                 <button class="btn-accent" id="itemInfoCloseBtn">Fermer</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- User Edit Modal -->
+    <div id="userEditModal" class="modal" role="dialog" aria-modal="true" style="display:none">
+        <div class="modal-backdrop" id="userEditModalBackdrop"></div>
+        <div class="modal-box modal-box-sm">
+            <h3>Modifier utilisateur</h3>
+            <p>Mise à jour du compte utilisateur</p>
+            <form id="adminUserEditForm" novalidate>
+                <input type="hidden" id="adminUserEditId">
+                <div class="form-group">
+                    <label for="adminUserEditUsername">Identifiant</label>
+                    <input type="text" id="adminUserEditUsername" required>
+                </div>
+                <div class="form-group">
+                    <label for="adminUserEditPassword">Mot de passe</label>
+                    <input type="password" id="adminUserEditPassword" placeholder="Laisser vide pour ne pas modifier">
+                </div>
+                <div class="form-group">
+                    <label for="adminUserEditName">Nom</label>
+                    <input type="text" id="adminUserEditName">
+                </div>
+                <div class="form-group">
+                    <label for="adminUserEditEmail">Email</label>
+                    <input type="email" id="adminUserEditEmail">
+                </div>
+                <div class="form-group">
+                    <label for="adminUserEditRole">Rôle</label>
+                    <select id="adminUserEditRole" class="sel">
+                        <option value="user">Utilisateur normal</option>
+                        <option value="admin">Görevli (admin)</option>
+                    </select>
+                </div>
+            </form>
+            <div class="modal-actions">
+                <button class="btn-ghost" id="userEditCancelBtn" type="button">Annuler</button>
+                <button class="btn-accent" id="userEditSaveBtn" type="button">Enregistrer</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Group Edit Modal -->
+    <div id="groupEditModal" class="modal" role="dialog" aria-modal="true" style="display:none">
+        <div class="modal-backdrop" id="groupEditModalBackdrop"></div>
+        <div class="modal-box modal-box-sm">
+            <h3>Modifier groupe</h3>
+            <p>Mise à jour du groupe</p>
+            <form id="adminGroupEditForm" novalidate>
+                <input type="hidden" id="adminGroupEditId">
+                <div class="form-group">
+                    <label for="adminGroupEditName">Nom du groupe</label>
+                    <input type="text" id="adminGroupEditName" required>
+                </div>
+                <div class="form-group">
+                    <label>Membres</label>
+                    <div class="group-members-toolbar">
+                        <span id="groupEditMembersCount" class="group-members-count">0 membre(s)</span>
+                        <input type="text" id="groupEditMembersSearch" class="group-members-search" placeholder="Rechercher un utilisateur..." autocomplete="off">
+                    </div>
+                    <div id="groupEditMembersList" class="group-members-list"></div>
+                </div>
+            </form>
+            <div class="modal-actions">
+                <button class="btn-ghost" id="groupEditCancelBtn" type="button">Annuler</button>
+                <button class="btn-accent" id="groupEditSaveBtn" type="button">Enregistrer</button>
             </div>
         </div>
     </div>

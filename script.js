@@ -12,6 +12,109 @@ let fileSystemData = createDefaultFileSystem();
 let currentFolderId = 'root';
 let expandedUploadFolderIds = new Set(['root']);
 let currentAuthUser = null;
+let adminUsers = [];
+let adminGroups = [];
+let selectedFollowUserId = null;
+let selectedFollowDesk = null;
+let followSelectionMode = 'users';
+let selectedFollowGroupId = null;
+let followSelectionRequestId = 0;
+let deskSyncTimer = null;
+let adminGroupFormMemberIds = [];
+let adminGroupEditMemberIds = [];
+
+function getUserStorageKey(user) {
+    return `${STORAGE_KEY}_${String(user?.id || 'guest')}`;
+}
+
+function getCurrentUserStorageKey() {
+    return getUserStorageKey(currentAuthUser);
+}
+
+function isValidDeskData(data) {
+    return data && data.nodes && data.nodes.root && data.nodes.root.type === 'folder' && Array.isArray(data.nodes.root.children);
+}
+
+function normalizeDeskData(payload) {
+    if (!isValidDeskData(payload)) {
+        return null;
+    }
+
+    const safePayload = { ...payload };
+    safePayload.nodes = Object.entries(payload.nodes || {}).reduce((acc, [nodeId, rawNode]) => {
+        if (!rawNode || typeof rawNode !== 'object') return acc;
+        const node = { ...rawNode, id: String(rawNode.id || nodeId) };
+        if (node.type === 'folder') {
+            node.children = Array.isArray(node.children) ? node.children.slice() : [];
+        }
+        acc[node.id] = node;
+        return acc;
+    }, {});
+
+    if (!safePayload.nodes.root || safePayload.nodes.root.type !== 'folder') {
+        return null;
+    }
+
+    safePayload.rootId = safePayload.rootId || 'root';
+    return safePayload;
+}
+
+function scheduleDeskSync() {
+    if (!currentAuthUser?.id) {
+        return;
+    }
+
+    clearTimeout(deskSyncTimer);
+    deskSyncTimer = setTimeout(() => {
+        persistCurrentUserDesk().catch(() => {});
+    }, 350);
+}
+
+async function persistCurrentUserDesk() {
+    if (!currentAuthUser?.id) return;
+    const normalized = normalizeDeskData(fileSystemData);
+    if (!normalized) {
+        return;
+    }
+
+    await apiRequest(`/api/filedesks/${encodeURIComponent(currentAuthUser.id)}`, {
+        method: 'PUT',
+        body: JSON.stringify({ payload: normalized })
+    });
+}
+
+function mapRole(role) {
+    const normalized = String(role || '').trim().toLowerCase();
+    if (normalized === 'görevli' || normalized === 'gorevli') {
+        return 'admin';
+    }
+    return normalized === 'admin' ? 'admin' : 'user';
+}
+
+function isAdminRole(user) {
+    if (!user?.role) return false;
+    return mapRole(user.role) === 'admin';
+}
+
+function getApiHeaders() {
+    const headers = { 'Content-Type': 'application/json' };
+    if (currentAuthUser?.id) {
+        headers['x-auth-user-id'] = String(currentAuthUser.id);
+    }
+    return headers;
+}
+
+async function apiRequest(path, options = {}) {
+    const response = await fetch(`${API_BASE_URL}${path}`, {
+        headers: getApiHeaders(),
+        ...options
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+        throw new Error(payload.message || 'Erreur réseau ou serveur');
+    }
+    return payload;
+}
 
 // ===========================
 // INITIALISATION
@@ -23,15 +126,19 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     loadStoredFiles();
+    await loadUserDeskFromServer();
     initNavigation();
     initDropZone();
     initFilters();
     initMobileMenu();
     initModals();
     initUploadFolderPicker();
+    initAdminViews();
     updateFilesCount();
     populateUploadFolderSelect(currentFolderId);
     updateCurrentFolderHints();
+
+    applyRoleVisibility();
 
     document.getElementById('browseBtn').addEventListener('click', (e) => {
         e.stopPropagation();
@@ -46,7 +153,56 @@ document.addEventListener('DOMContentLoaded', async () => {
         document.getElementById('explorerFileInput').click();
     });
     document.getElementById('explorerFileInput').addEventListener('change', handleExplorerUpload);
+
+    if (isAdminRole(currentAuthUser)) {
+        await loadAdminData();
+    }
 });
+
+async function loadUserDeskFromServer(userId = currentAuthUser?.id) {
+    if (!userId || !isValidDeskData(fileSystemData)) {
+        loadStoredFiles();
+    }
+
+    try {
+        const payload = await apiRequest(`/api/filedesks/${encodeURIComponent(userId)}`);
+        const serverDesk = normalizeDeskData(payload.desk);
+        if (serverDesk) {
+            fileSystemData = serverDesk;
+            currentFolderId = fileSystemData.currentFolderId || fileSystemData.rootId || 'root';
+            if (!fileSystemData.nodes[currentFolderId]) {
+                currentFolderId = fileSystemData.rootId || 'root';
+            }
+        }
+
+        if (!isValidDeskData(fileSystemData)) {
+            fileSystemData = createDefaultFileSystem();
+            currentFolderId = 'root';
+        }
+    } catch (error) {
+        if (!isValidDeskData(fileSystemData)) {
+            fileSystemData = createDefaultFileSystem();
+            currentFolderId = 'root';
+        }
+    }
+
+    // Synchronise la version locale si la base n'avait pas encore ce bureau.
+    if (!isValidDeskData(fileSystemData)) {
+        return;
+    }
+    await persistCurrentUserDesk().catch(() => {});
+}
+
+async function loadAdminData() {
+    try {
+        await loadUsersData();
+        await loadGroupsData();
+        await loadFollowUsers();
+    } catch (err) {
+        console.error(err);
+        showToast('Impossible de charger les données d’administration.', 'error');
+    }
+}
 
 // ===========================
 // NAVIGATION
@@ -64,7 +220,18 @@ function initNavigation() {
     });
 }
 
+function applyRoleVisibility() {
+    const isAdmin = isAdminRole(currentAuthUser);
+    document.querySelectorAll('.admin-only').forEach(item => {
+        item.style.display = isAdmin ? 'flex' : 'none';
+    });
+}
+
 function switchView(view) {
+    if (['users', 'groups', 'follow'].includes(view) && !isAdminRole(currentAuthUser)) {
+        view = 'upload';
+    }
+
     document.querySelectorAll('.view-section').forEach(s => s.classList.remove('active'));
     if (view === 'upload') {
         document.getElementById('uploadView').classList.add('active');
@@ -72,6 +239,19 @@ function switchView(view) {
     } else if (view === 'files') {
         document.getElementById('filesView').classList.add('active');
         displayFiles();
+    } else if (view === 'history') {
+        document.getElementById('historyView').classList.add('active');
+        loadUserHistory();
+    } else if (view === 'users') {
+        document.getElementById('usersView').classList.add('active');
+        loadUsersData();
+    } else if (view === 'groups') {
+        document.getElementById('groupsView').classList.add('active');
+        loadGroupsData();
+    } else if (view === 'follow') {
+        document.getElementById('followView').classList.add('active');
+        resetFollowView();
+        loadFollowUsers();
     }
 }
 
@@ -124,7 +304,11 @@ async function initAuth() {
     try {
         const response = await fetch(`${API_BASE_URL}/api/users/${encodeURIComponent(savedId)}`);
         if (!response.ok) throw new Error('Unauthorized');
-        const user = await response.json();
+        const responseBody = await response.json();
+        const user = responseBody.user || responseBody;
+        if (user?.role) {
+            user.role = mapRole(user.role);
+        }
         currentAuthUser = user;
         localStorage.setItem(AUTH_CACHE_KEY, JSON.stringify(user));
         hydrateUserUI(user);
@@ -148,7 +332,7 @@ function hydrateUserUI(user) {
         .join('') || 'U';
 
     const roleMap = {
-        admin: 'Administrateur',
+        admin: 'Görevli',
         alternant: 'Alternant',
         salarie: 'Salarié'
     };
@@ -193,13 +377,201 @@ function initModals() {
         if (e.key === 'Escape') closeFolderModal();
     });
 
+    document.getElementById('userEditCancelBtn')?.addEventListener('click', closeUserEditModal);
+    document.getElementById('userEditSaveBtn')?.addEventListener('click', handleAdminUserEditSubmit);
+    document.getElementById('userEditModalBackdrop')?.addEventListener('click', closeUserEditModal);
+    document.getElementById('adminUserEditPassword')?.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            handleAdminUserEditSubmit();
+        }
+    });
+
+    document.getElementById('groupEditCancelBtn')?.addEventListener('click', closeGroupEditModal);
+    document.getElementById('groupEditSaveBtn')?.addEventListener('click', handleAdminGroupEditSubmit);
+    document.getElementById('groupEditModalBackdrop')?.addEventListener('click', closeGroupEditModal);
+
+    document.getElementById('groupMembersSearch')?.addEventListener('input', () => {
+        const search = document.getElementById('groupMembersSearch').value;
+        renderGroupMemberInputs(adminGroupFormMemberIds, {
+            search,
+            containerId: 'groupMembersList',
+            countId: 'groupMembersCount'
+        });
+    });
+
+    document.getElementById('groupEditMembersSearch')?.addEventListener('input', () => {
+        const search = document.getElementById('groupEditMembersSearch').value;
+        renderGroupMemberInputs(adminGroupEditMemberIds, {
+            search,
+            containerId: 'groupEditMembersList',
+            countId: 'groupEditMembersCount'
+        });
+    });
+
+    document.getElementById('groupMembersList')?.addEventListener('change', (event) => {
+        const target = event.target;
+        if (!(target instanceof HTMLInputElement) || target.type !== 'checkbox') return;
+        const userId = Number(target.value);
+        if (!userId) return;
+        if (target.checked) {
+            if (!adminGroupFormMemberIds.includes(userId)) {
+                adminGroupFormMemberIds.push(userId);
+            }
+        } else {
+            adminGroupFormMemberIds = adminGroupFormMemberIds.filter(id => id !== userId);
+        }
+        renderGroupMemberInputs(adminGroupFormMemberIds, {
+            containerId: 'groupMembersList',
+            countId: 'groupMembersCount',
+            search: document.getElementById('groupMembersSearch')?.value || ''
+        });
+    });
+
+    document.getElementById('groupEditMembersList')?.addEventListener('change', (event) => {
+        const target = event.target;
+        if (!(target instanceof HTMLInputElement) || target.type !== 'checkbox') return;
+        const userId = Number(target.value);
+        if (!userId) return;
+        if (target.checked) {
+            if (!adminGroupEditMemberIds.includes(userId)) {
+                adminGroupEditMemberIds.push(userId);
+            }
+        } else {
+            adminGroupEditMemberIds = adminGroupEditMemberIds.filter(id => id !== userId);
+        }
+        renderGroupMemberInputs(adminGroupEditMemberIds, {
+            containerId: 'groupEditMembersList',
+            countId: 'groupEditMembersCount',
+            search: document.getElementById('groupEditMembersSearch')?.value || ''
+        });
+    });
+
     document.addEventListener('keydown', (e) => {
         if (e.key === 'Escape') {
             closeSuccessModal();
             closeFolderModal();
             closeItemInfoModal();
+            closeUserEditModal();
+            closeGroupEditModal();
         }
     });
+
+    document.getElementById('followClearScopeBtn')?.addEventListener('click', () => {
+        showAllFollowUsers();
+    });
+}
+
+function initAdminViews() {
+    const userForm = document.getElementById('adminUserForm');
+    if (userForm) {
+        userForm.addEventListener('submit', handleAdminUserSubmit);
+        document.getElementById('adminUserResetBtn')?.addEventListener('click', resetAdminUserForm);
+    }
+
+    const groupForm = document.getElementById('adminGroupForm');
+    if (groupForm) {
+        groupForm.addEventListener('submit', handleAdminGroupSubmit);
+        document.getElementById('adminGroupResetBtn')?.addEventListener('click', resetAdminGroupForm);
+    }
+
+    const editUserForm = document.getElementById('adminUserEditForm');
+    if (editUserForm) {
+        editUserForm.addEventListener('submit', (event) => {
+            event.preventDefault();
+            handleAdminUserEditSubmit();
+        });
+    }
+
+    const editGroupForm = document.getElementById('adminGroupEditForm');
+    if (editGroupForm) {
+        editGroupForm.addEventListener('submit', (event) => {
+            event.preventDefault();
+            handleAdminGroupEditSubmit();
+        });
+    }
+}
+
+async function loadUsersData() {
+    const payload = await apiRequest('/api/users');
+    adminUsers = payload.users || [];
+    renderUsersTable();
+    if (followSelectionMode === 'group' && selectedFollowGroupId) {
+        const activeGroup = adminGroups.find(g => String(g.id) === String(selectedFollowGroupId));
+        if (activeGroup) {
+            openGroupFollow(selectedFollowGroupId);
+            return;
+        }
+        showAllFollowUsers();
+    } else {
+        renderFollowUsersTable();
+    }
+    renderGroupMemberInputs(adminGroupFormMemberIds, {
+        containerId: 'groupMembersList',
+        countId: 'groupMembersCount',
+        search: document.getElementById('groupMembersSearch')?.value || ''
+    });
+}
+
+async function loadGroupsData() {
+    const payload = await apiRequest('/api/groups');
+    adminGroups = payload.groups || [];
+    renderGroupsTable();
+    renderFollowGroupsTable();
+
+    if (followSelectionMode === 'group' && selectedFollowGroupId) {
+        const group = adminGroups.find(g => String(g.id) === String(selectedFollowGroupId));
+        if (group) {
+            openGroupFollow(selectedFollowGroupId, false);
+            return;
+        }
+    }
+
+    if (followSelectionMode === 'group') {
+        showAllFollowUsers();
+    }
+}
+
+async function loadFollowUsers() {
+    if (!adminUsers.length) {
+        await loadUsersData();
+    }
+    if (!adminUsers.length) {
+        const usersTbody = document.getElementById('followUsersBody');
+        const usersEmpty = document.getElementById('followUsersEmptyState');
+        if (usersTbody) usersTbody.innerHTML = '';
+        if (usersEmpty) usersEmpty.classList.add('show');
+        const groupsTbody = document.getElementById('followGroupsBody');
+        const groupsEmpty = document.getElementById('followGroupsEmptyState');
+        if (groupsTbody) groupsTbody.innerHTML = '';
+        if (groupsEmpty) groupsEmpty.classList.add('show');
+        return;
+    }
+    if (!adminGroups.length) {
+        await loadGroupsData();
+    }
+    renderFollowUsersTable();
+    renderFollowGroupsTable();
+}
+
+async function loadUserHistory() {
+    const payload = await apiRequest('/api/uploads?limit=200');
+    renderHistoryTable(payload.uploads || []);
+}
+
+async function loadSelectedUserDesk(userId) {
+    const payload = await apiRequest(`/api/uploads?userId=${encodeURIComponent(userId)}&limit=200`);
+    renderFollowHistory(payload.uploads || []);
+}
+
+async function loadSelectedUserHistoryAndDesk(userId) {
+    const [historyPayload, deskPayload] = await Promise.all([
+        apiRequest(`/api/uploads?userId=${encodeURIComponent(userId)}&limit=200`),
+        apiRequest(`/api/filedesks/${encodeURIComponent(userId)}`)
+    ]);
+
+    selectedFollowDesk = normalizeDeskData(deskPayload?.desk) || createDefaultFileSystem();
+    renderFollowHistory(historyPayload.uploads || []);
+    renderFollowDesk(selectedFollowDesk);
 }
 
 function initUploadFolderPicker() {
@@ -283,6 +655,768 @@ function showItemInfoModal(itemId) {
 function closeItemInfoModal() {
     const modal = document.getElementById('itemInfoModal');
     if (modal) modal.style.display = 'none';
+}
+
+function renderHistoryTable(uploads) {
+    const tbody = document.getElementById('historyTableBody');
+    const empty = document.getElementById('historyEmptyState');
+    if (!tbody || !empty) return;
+
+    tbody.innerHTML = '';
+    if (!uploads.length) {
+        empty.classList.add('show');
+        return;
+    }
+
+    empty.classList.remove('show');
+    uploads.forEach(file => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td>${escapeHtml(file.file_name)}</td>
+            <td><span class="badge ${getUploadBadgeClass(file.file_type)}">${escapeHtml(file.file_type || 'OTHER')}</span></td>
+            <td>${formatFileSize(file.file_size)}</td>
+            <td>${escapeHtml(file.folder_path || 'Racine')}</td>
+            <td class="cell-muted">${escapeHtml(file.created_at || '')}</td>
+        `;
+        tbody.appendChild(tr);
+    });
+}
+
+function getUploadBadgeClass(type) {
+    const map = {
+        PDF: 'badge-pdf',
+        DOC: 'badge-doc',
+        Image: 'badge-image',
+        Video: 'badge-video',
+        Archive: 'badge-archive',
+        Spreadsheet: 'badge-spreadsheet',
+        Presentation: 'badge-presentation'
+    };
+    return map[type] || 'badge-other';
+}
+
+function renderUsersTable() {
+    const tbody = document.getElementById('usersTableBody');
+    const empty = document.getElementById('usersEmptyState');
+    if (!tbody || !empty) return;
+
+    const isAdmin = isAdminRole(currentAuthUser?.role);
+
+    tbody.innerHTML = '';
+    if (!adminUsers.length) {
+        empty.classList.add('show');
+        return;
+    }
+
+    empty.classList.remove('show');
+    adminUsers.forEach(user => {
+        const groups = (user.groups || []).map(g => (typeof g === 'string' ? g : g.name)).filter(Boolean).join(', ') || '—';
+        const actionCell = isAdmin
+            ? `<td class="actions-cell">
+                    <button class="action-btn" onclick="startUserEdit(${user.id})">Modifier</button>
+                    <button class="action-btn delete" onclick="removeUser(${user.id})">Supprimer</button>
+               </td>`
+            : '';
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td>${escapeHtml(user.username)}</td>
+            <td>${escapeHtml(user.name || '—')}</td>
+            <td>${escapeHtml(user.email || '—')}</td>
+            <td><span class="badge ${mapRole(user.role) === 'admin' ? 'badge-pdf' : 'badge-other'}">${escapeHtml(mapRoleLabel(user.role))}</span></td>
+            <td>${escapeHtml(groups)}</td>
+            ${actionCell}
+        `;
+        tbody.appendChild(tr);
+    });
+}
+
+function getTrackableFollowUsers() {
+    return adminUsers.filter(user => {
+        return String(user.id) !== String(currentAuthUser?.id) && mapRole(user.role) !== 'admin';
+    });
+}
+
+function renderGroupsTable() {
+    const tbody = document.getElementById('groupsTableBody');
+    const empty = document.getElementById('groupsEmptyState');
+    if (!tbody || !empty) return;
+
+    tbody.innerHTML = '';
+    if (!adminGroups.length) {
+        empty.classList.add('show');
+        return;
+    }
+
+    empty.classList.remove('show');
+    adminGroups.forEach(group => {
+        const members = (group.members || []).length;
+        const created = group.created_at ? new Date(group.created_at).toLocaleDateString('fr-FR') : '—';
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td>${escapeHtml(group.name)}</td>
+            <td>${escapeHtml(created)}</td>
+            <td>${members} membre(s)</td>
+            <td class="actions-cell">
+                <button class="action-btn" onclick="startGroupEdit(${group.id})">Modifier</button>
+                <button class="action-btn delete" onclick="removeGroup(${group.id})">Supprimer</button>
+            </td>
+        `;
+            tbody.appendChild(tr);
+    });
+}
+
+function getFollowActiveGroupName() {
+    if (!selectedFollowGroupId) {
+        return null;
+    }
+
+    const group = adminGroups.find(item => String(item.id) === String(selectedFollowGroupId));
+    return group ? group.name : null;
+}
+
+function getTrackableFollowUsersInGroup(groupId = selectedFollowGroupId) {
+    const group = adminGroups.find(item => String(item.id) === String(groupId));
+    if (!group) {
+        return [];
+    }
+
+    const memberIds = new Set((group.members || []).map(member => Number(member?.id || member)).filter(Boolean));
+    return getTrackableFollowUsers().filter(user => memberIds.has(Number(user.id)));
+}
+
+function renderFollowUsersTable(users = getTrackableFollowUsers()) {
+    const tbody = document.getElementById('followUsersBody');
+    const usersEmpty = document.getElementById('followUsersEmptyState');
+    if (!tbody) return;
+    tbody.innerHTML = '';
+    if (usersEmpty) usersEmpty.classList.add('show');
+
+    if (!users.length) return;
+
+    if (usersEmpty) usersEmpty.classList.remove('show');
+
+    users.forEach(user => {
+        const groups = (user.groups || []).map(g => (typeof g === 'string' ? g : g.name)).filter(Boolean);
+        const tr = document.createElement('tr');
+        const groupNames = groups.join(', ') || '—';
+        tr.innerHTML = `
+            <td>${escapeHtml(user.username || '—')}</td>
+            <td>${escapeHtml(user.name || '—')}</td>
+            <td>${escapeHtml(user.email || '—')}</td>
+            <td>${escapeHtml(groupNames)}</td>
+            <td class="actions-cell">
+                <button class="action-btn" onclick="openUserFollow(${user.id})">Voir bureau</button>
+            </td>
+        `;
+        tbody.appendChild(tr);
+    });
+
+    if (followSelectionMode === 'group') {
+        const selectedLabel = selectedFollowGroupId
+            ? (adminGroups.find(group => String(group.id) === String(selectedFollowGroupId))?.name || `Groupe ${selectedFollowGroupId}`)
+            : 'Groupe';
+        updateFollowScopeLabel(`Sélection : utilisateurs du groupe ${selectedLabel}`);
+    } else {
+        updateFollowScopeLabel('Aucun filtre de groupe actif.');
+    }
+}
+
+function renderFollowGroupsTable() {
+    const tbody = document.getElementById('followGroupsBody');
+    const empty = document.getElementById('followGroupsEmptyState');
+    if (!tbody || !empty) return;
+
+    tbody.innerHTML = '';
+    if (!adminGroups.length) {
+        empty.classList.add('show');
+        return;
+    }
+
+    empty.classList.remove('show');
+    adminGroups.forEach(group => {
+        const tr = document.createElement('tr');
+        const members = group.members || [];
+        const memberCount = Array.isArray(members)
+            ? members.filter(member => {
+                const role = mapRole(member?.role);
+                const memberId = String(member?.id || '');
+                return role !== 'admin' && memberId !== String(currentAuthUser?.id);
+            }).length
+            : 0;
+
+        const memberNames = Array.isArray(members)
+            ? members
+                .map((member) => {
+                    if (!member) return null;
+                    if (typeof member === 'string') return member;
+                    return member.name || member.username || member.email || String(member.id || '');
+                })
+                .filter(Boolean)
+            : [];
+
+        const membersPreview = memberNames.length > 3
+            ? `${memberNames.slice(0, 3).join(', ')} et ${memberNames.length - 3} autre(s)`
+            : (memberNames.join(', ') || '—');
+
+        tr.innerHTML = `
+            <td>${escapeHtml(group.name)}</td>
+            <td>${memberCount} membre(s)</td>
+            <td title="${escapeHtml(memberNames.join(', '))}">${escapeHtml(membersPreview)}</td>
+            <td class="actions-cell">
+                <button class="action-btn" onclick="openGroupFollow(${group.id})">Voir membres</button>
+            </td>
+        `;
+        tbody.appendChild(tr);
+    });
+}
+
+function resetFollowView() {
+    selectedFollowUserId = null;
+    selectedFollowDesk = null;
+    followSelectionMode = 'users';
+    selectedFollowGroupId = null;
+    followSelectionRequestId = 0;
+    updateFollowScopeLabel('Aucun filtre de groupe actif.');
+    const title = document.getElementById('followUserTitle');
+    const meta = document.getElementById('followUserMeta');
+    if (title) title.textContent = 'Aucun utilisateur sélectionné';
+    if (meta) meta.textContent = 'Sélectionnez un utilisateur pour voir son bureau et son historique.';
+    renderFollowHistory([]);
+    renderFollowDesk(null);
+}
+
+async function openUserFollow(userId) {
+    const requestId = ++followSelectionRequestId;
+    renderFollowHistory([]);
+    renderFollowDesk(null);
+    selectedFollowUserId = Number(userId);
+    const title = document.getElementById('followUserTitle');
+    const meta = document.getElementById('followUserMeta');
+    if (title) title.textContent = 'Chargement...';
+    if (meta) meta.textContent = 'Récupération du détail utilisateur...';
+
+    try {
+        const [overviewResult, historyResult, deskResult] = await Promise.all([
+            apiRequest(`/api/admin/users/${encodeURIComponent(userId)}/overview`),
+            apiRequest(`/api/uploads?userId=${encodeURIComponent(userId)}&limit=200`).catch(error => ({ _error: String(error?.message || '') })),
+            apiRequest(`/api/filedesks/${encodeURIComponent(userId)}`).catch(() => null)
+        ]);
+
+        if (requestId !== followSelectionRequestId) {
+            return;
+        }
+
+        const overview = overviewResult || {};
+        const user = overview.user;
+        if (!user) {
+            throw new Error('Utilisateur introuvable');
+        }
+
+        const historyPayload = historyResult && !historyResult._error
+            ? historyResult
+            : { uploads: [] };
+
+        const fallbackDeskData = overview.user?.desk || null;
+        const deskPayload = deskResult ? deskResult : { desk: fallbackDeskData };
+
+        if (historyResult && historyResult._error) {
+            showToast('L’historique utilisateur n’est pas disponible pour le moment.', 'error');
+        }
+        if (deskResult === null && !fallbackDeskData) {
+            showToast('Le bureau utilisateur n’est pas disponible pour le moment.', 'error');
+        }
+
+        const groups = Array.isArray(user.groups)
+            ? user.groups.map(group => (typeof group === 'string' ? group : group.name)).filter(Boolean).join(', ') || '—'
+            : '—';
+
+        selectedFollowUserId = user.id;
+        if (title) title.textContent = `${user.name || user.username} — ${user.email || ''}`;
+        if (meta) meta.textContent = `Rôle : ${mapRoleLabel(user.role)} | Dépôts : ${overview.totalUploads || 0} | Groupes : ${groups}`;
+
+        const normalizedDesk = normalizeDeskData(deskPayload?.desk);
+        selectedFollowDesk = normalizedDesk || createDefaultFileSystem();
+        renderFollowHistory(historyPayload.uploads || []);
+        renderFollowDesk(selectedFollowDesk);
+
+        if (followSelectionMode === 'group' && selectedFollowGroupId) {
+            const groupLabel = getFollowActiveGroupName() || `Groupe ${selectedFollowGroupId}`;
+            updateFollowScopeLabel(`Filtre actif : utilisateurs du groupe ${groupLabel}`);
+            setFollowScopeUi(true);
+        } else {
+            followSelectionMode = 'users';
+            selectedFollowGroupId = null;
+            updateFollowScopeLabel('Aucun filtre de groupe actif.');
+            setFollowScopeUi(false);
+        }
+    } catch (error) {
+        if (requestId !== followSelectionRequestId) {
+            return;
+        }
+        showToast(error.message || 'Erreur de chargement du suivi utilisateur', 'error');
+        resetFollowView();
+    }
+}
+
+function updateFollowScopeLabel(text) {
+    const scopeLabel = document.getElementById('followScopeLabel');
+    if (scopeLabel) scopeLabel.textContent = text;
+}
+
+function setFollowScopeUi(isInGroup) {
+    const clearScopeBtn = document.getElementById('followClearScopeBtn');
+    if (!clearScopeBtn) return;
+    clearScopeBtn.style.display = isInGroup ? 'inline-flex' : 'none';
+}
+
+function showAllFollowUsers() {
+    followSelectionMode = 'users';
+    selectedFollowGroupId = null;
+    selectedFollowUserId = null;
+    setFollowScopeUi(false);
+    renderFollowUsersTable();
+    updateFollowScopeLabel('Aucun filtre de groupe actif.');
+
+    const title = document.getElementById('followUserTitle');
+    const meta = document.getElementById('followUserMeta');
+    if (title) title.textContent = 'Aucun utilisateur sélectionné';
+    if (meta) meta.textContent = 'Sélectionnez un utilisateur pour voir son bureau et son historique.';
+    renderFollowHistory([]);
+    renderFollowDesk(null);
+}
+
+function openGroupFollow(groupId, refreshUsers = true) {
+    const group = adminGroups.find(item => String(item.id) === String(groupId));
+    if (!group) {
+        return;
+    }
+
+    followSelectionMode = 'group';
+    selectedFollowGroupId = Number(group.id);
+    selectedFollowUserId = null;
+    selectedFollowDesk = null;
+    setFollowScopeUi(true);
+    const members = getTrackableFollowUsersInGroup(group.id);
+    renderFollowUsersTable(members);
+    updateFollowScopeLabel(`Filtre actif : utilisateurs du groupe ${group.name}`);
+    const title = document.getElementById('followUserTitle');
+    const meta = document.getElementById('followUserMeta');
+    if (title) title.textContent = `Groupe : ${group.name}`;
+    if (meta) meta.textContent = 'Choisissez un membre pour ouvrir son bureau et son historique.';
+
+    renderFollowHistory([]);
+    renderFollowDesk(null);
+
+    if (refreshUsers) {
+        renderFollowGroupsTable();
+    }
+}
+
+function renderFollowHistory(files) {
+    const tbody = document.getElementById('followHistoryBody');
+    const empty = document.getElementById('followEmptyState');
+    if (!tbody || !empty) return;
+
+    tbody.innerHTML = '';
+    if (!files.length) {
+        empty.classList.add('show');
+        return;
+    }
+
+    empty.classList.remove('show');
+    files.forEach(file => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td>${escapeHtml(file.file_name)}</td>
+            <td><span class="badge ${getUploadBadgeClass(file.file_type)}">${escapeHtml(file.file_type || 'OTHER')}</span></td>
+            <td>${formatFileSize(file.file_size)}</td>
+            <td>${escapeHtml(file.folder_path || 'Racine')}</td>
+            <td>${escapeHtml(file.created_at || '')}</td>
+        `;
+        tbody.appendChild(tr);
+    });
+}
+
+function renderFollowDesk(deskData) {
+    const tbody = document.getElementById('followDeskBody');
+    const empty = document.getElementById('followDeskEmptyState');
+    if (!tbody || !empty) return;
+
+    const normalized = normalizeDeskData(deskData);
+    const rows = [];
+    if (!normalized) {
+        empty.classList.add('show');
+        tbody.innerHTML = '';
+        return;
+    }
+
+    walkDeskForFollow(normalized.nodes, normalized.rootId || 'root', [], rows, 0);
+
+    tbody.innerHTML = '';
+    if (!rows.length) {
+        empty.classList.add('show');
+        return;
+    }
+
+    empty.classList.remove('show');
+    rows.forEach(file => {
+        const rowClass = file.type === 'folder' ? 'folder-row' : '';
+        const row = document.createElement('tr');
+        row.className = rowClass;
+        row.innerHTML = `
+            <td>${escapeHtml(file.name || '—')}</td>
+            <td>${escapeHtml(file.path || 'Racine')}</td>
+            <td>${escapeHtml(file.type === 'folder' ? 'Dossier' : 'Fichier')}</td>
+            <td>${formatFileSize(file.size || 0)}</td>
+            <td>${escapeHtml(file.date || '—')}</td>
+        `;
+        tbody.appendChild(row);
+    });
+}
+
+function walkDeskForFollow(nodes, folderId, prefixPath, rows, level = 0) {
+    const folder = nodes[folderId];
+    if (!folder || folder.type !== 'folder') {
+        return;
+    }
+
+    const currentPath = [...prefixPath, folder.name].filter(Boolean);
+    const folderPath = currentPath.join(' / ') || 'Racine';
+    const children = Array.isArray(folder.children) ? folder.children : [];
+
+    if (level >= 0) {
+        rows.push({
+            name: folder.name,
+            path: folderPath,
+            type: 'folder',
+            size: 0,
+            date: folder.createdAt ? new Date(folder.createdAt).toLocaleDateString('fr-FR') : '—'
+        });
+    }
+
+    children.forEach((childId) => {
+        const child = nodes[childId];
+        if (!child) return;
+
+        if (child.type === 'folder') {
+            walkDeskForFollow(nodes, child.id, currentPath, rows, level + 1);
+        } else {
+            rows.push({
+                name: child.name,
+                path: folderPath,
+                type: 'file',
+                size: Number(child.fileSize) || 0,
+                date: child.timestamp ? new Date(child.timestamp).toLocaleDateString('fr-FR') : '—'
+            });
+        }
+    });
+}
+
+function mapRoleLabel(role) {
+    return mapRole(role) === 'admin' ? 'Görevli' : 'Utilisateur';
+}
+
+function renderGroupMemberInputs(selectedUserIds = [], options = {}) {
+    const {
+        search = '',
+        containerId = 'groupMembersList',
+        countId = 'groupMembersCount'
+    } = options;
+
+    const container = document.getElementById(containerId);
+    const countElement = document.getElementById(countId);
+    if (!container) return;
+
+    const normalizedSearch = search.toLowerCase().trim();
+    const selected = new Set(selectedUserIds.map(id => Number(id)).filter(Boolean));
+    const users = adminUsers
+        .slice()
+        .sort((a, b) => {
+            const aLabel = String(a.name || a.username || '').toLowerCase();
+            const bLabel = String(b.name || b.username || '').toLowerCase();
+            return aLabel.localeCompare(bLabel);
+        })
+        .filter(user => {
+            const label = `${user.name || ''} ${user.username || ''}`.toLowerCase();
+            return !normalizedSearch || label.includes(normalizedSearch);
+        });
+
+    container.innerHTML = '';
+    if (!users.length) {
+        container.innerHTML = '<p class="group-members-empty">Aucun utilisateur disponible.</p>';
+    }
+    users.forEach(user => {
+        const checkboxId = `${containerId}-member-${user.id}`;
+        container.innerHTML += `
+            <label class="group-member-item">
+                <input type="checkbox" id="${checkboxId}" value="${user.id}" ${selected.has(Number(user.id)) ? 'checked' : ''}>
+                <span>${escapeHtml(user.name || user.username)}</span>
+            </label>
+        `;
+    });
+
+    if (countElement) {
+        const selectedCount = selectedUserIds.length;
+        countElement.textContent = `${selectedCount} membre(s)`;
+    }
+}
+
+function resetAdminUserForm() {
+    const form = document.getElementById('adminUserForm');
+    if (!form) return;
+    form.reset();
+    const idInput = document.getElementById('adminUserId');
+    if (idInput) idInput.value = '';
+}
+
+function closeUserEditModal() {
+    const modal = document.getElementById('userEditModal');
+    if (!modal) return;
+    const editForm = document.getElementById('adminUserEditForm');
+    if (editForm) editForm.reset();
+    modal.style.display = 'none';
+}
+
+function closeGroupEditModal() {
+    const modal = document.getElementById('groupEditModal');
+    if (!modal) return;
+    const editForm = document.getElementById('adminGroupEditForm');
+    const searchInput = document.getElementById('groupEditMembersSearch');
+    if (editForm) {
+        editForm.reset();
+    }
+    if (searchInput) {
+        searchInput.value = '';
+    }
+    adminGroupEditMemberIds = [];
+    renderGroupMemberInputs(adminGroupEditMemberIds, {
+        containerId: 'groupEditMembersList',
+        countId: 'groupEditMembersCount'
+    });
+    modal.style.display = 'none';
+}
+
+function resetAdminGroupForm() {
+    const form = document.getElementById('adminGroupForm');
+    if (!form) return;
+    form.reset();
+    const idInput = document.getElementById('adminGroupId');
+    if (idInput) idInput.value = '';
+    adminGroupFormMemberIds = [];
+    renderGroupMemberInputs(adminGroupFormMemberIds, {
+        containerId: 'groupMembersList',
+        countId: 'groupMembersCount',
+        search: ''
+    });
+}
+
+async function handleAdminUserSubmit(e) {
+    e.preventDefault();
+
+    const username = document.getElementById('adminUserUsername').value.trim();
+    const password = document.getElementById('adminUserPassword').value;
+    const name = document.getElementById('adminUserName').value.trim();
+    const email = document.getElementById('adminUserEmail').value.trim();
+    const role = document.getElementById('adminUserRole').value;
+
+    if (!username) {
+        showToast('Identifiant requis', 'error');
+        return;
+    }
+
+    const payload = { username, name, email: email || null, role };
+    if (password) payload.password = password;
+
+    try {
+        if (!password) {
+            showToast('Mot de passe requis pour la création', 'error');
+            return;
+        }
+        await apiRequest('/api/users', { method: 'POST', body: JSON.stringify(payload) });
+        showToast('Utilisateur créé', 'success');
+        resetAdminUserForm();
+        await loadUsersData();
+    } catch (err) {
+        showToast(err.message || 'Erreur sauvegarde utilisateur', 'error');
+    }
+}
+
+async function handleAdminUserEditSubmit() {
+    const editForm = document.getElementById('adminUserEditForm');
+    const idInput = document.getElementById('adminUserEditId');
+    const username = document.getElementById('adminUserEditUsername').value.trim();
+    const password = document.getElementById('adminUserEditPassword').value;
+    const name = document.getElementById('adminUserEditName').value.trim();
+    const email = document.getElementById('adminUserEditEmail').value.trim();
+    const role = document.getElementById('adminUserEditRole').value;
+
+    if (!idInput?.value) {
+        showToast('Sélectionnez un utilisateur à modifier.', 'error');
+        return;
+    }
+    if (!username) {
+        showToast('Identifiant requis', 'error');
+        return;
+    }
+    if (!editForm) {
+        return;
+    }
+
+    const payload = {
+        username,
+        name,
+        role,
+        email: email || null
+    };
+    if (password) {
+        payload.password = password;
+    }
+
+    try {
+        await apiRequest(`/api/users/${encodeURIComponent(idInput.value)}`, {
+            method: 'PATCH',
+            body: JSON.stringify(payload)
+        });
+        showToast('Utilisateur modifié', 'success');
+        closeUserEditModal();
+        await loadUsersData();
+    } catch (err) {
+        showToast(err.message || 'Erreur modification utilisateur', 'error');
+    }
+}
+
+async function removeUser(userId) {
+    if (!confirm('Supprimer cet utilisateur ?')) return;
+    if (String(userId) === String(currentAuthUser?.id)) {
+        showToast('Vous ne pouvez pas supprimer votre propre compte.', 'error');
+        return;
+    }
+
+    try {
+        await apiRequest(`/api/users/${userId}`, { method: 'DELETE' });
+        await loadUsersData();
+        showToast('Utilisateur supprimé', 'info');
+    } catch (err) {
+        showToast(err.message || 'Erreur suppression utilisateur', 'error');
+    }
+}
+
+async function startUserEdit(userId) {
+    const user = adminUsers.find(u => String(u.id) === String(userId));
+    if (!user) return;
+
+    const idInput = document.getElementById('adminUserEditId');
+    const username = document.getElementById('adminUserEditUsername');
+    const name = document.getElementById('adminUserEditName');
+    const email = document.getElementById('adminUserEditEmail');
+    const role = document.getElementById('adminUserEditRole');
+    const password = document.getElementById('adminUserEditPassword');
+    const modal = document.getElementById('userEditModal');
+    if (!idInput || !username || !name || !email || !role || !password || !modal) return;
+
+    idInput.value = String(user.id);
+    username.value = user.username || '';
+    name.value = user.name || '';
+    email.value = user.email || '';
+    role.value = mapRoleBackend(user.role);
+    password.value = '';
+    modal.style.display = 'flex';
+}
+
+function mapRoleBackend(role) {
+    return role === 'admin' ? 'admin' : 'user';
+}
+
+async function handleAdminGroupSubmit(e) {
+    e.preventDefault();
+    const idInput = document.getElementById('adminGroupId');
+    const name = document.getElementById('adminGroupName').value.trim();
+    const checked = adminGroupFormMemberIds;
+
+    if (!name) {
+        showToast('Nom de groupe requis', 'error');
+        return;
+    }
+
+    const payload = { name, userIds: checked };
+    try {
+        const editing = idInput.value ? Number(idInput.value) : null;
+        if (editing) {
+            await apiRequest(`/api/groups/${editing}`, { method: 'PATCH', body: JSON.stringify(payload) });
+            showToast('Groupe modifié', 'success');
+        } else {
+            await apiRequest('/api/groups', { method: 'POST', body: JSON.stringify(payload) });
+            showToast('Groupe créé', 'success');
+        }
+        resetAdminGroupForm();
+        await loadGroupsData();
+        await loadUsersData();
+    } catch (err) {
+        showToast(err.message || 'Erreur sauvegarde groupe', 'error');
+    }
+}
+
+async function handleAdminGroupEditSubmit() {
+    const idInput = document.getElementById('adminGroupEditId');
+    const name = document.getElementById('adminGroupEditName').value.trim();
+    const checked = adminGroupEditMemberIds;
+
+    if (!idInput?.value) {
+        showToast('Sélectionnez un groupe à modifier.', 'error');
+        return;
+    }
+    if (!name) {
+        showToast('Nom de groupe requis', 'error');
+        return;
+    }
+
+    const payload = { name, userIds: checked };
+    try {
+        await apiRequest(`/api/groups/${encodeURIComponent(idInput.value)}`, {
+            method: 'PATCH',
+            body: JSON.stringify(payload)
+        });
+        closeGroupEditModal();
+        showToast('Groupe modifié', 'success');
+        await loadGroupsData();
+        await loadUsersData();
+    } catch (err) {
+        showToast(err.message || 'Erreur modification groupe', 'error');
+    }
+}
+
+async function removeGroup(groupId) {
+    if (!confirm('Supprimer ce groupe ?')) return;
+    try {
+        await apiRequest(`/api/groups/${groupId}`, { method: 'DELETE' });
+        await loadGroupsData();
+        await loadUsersData();
+        showToast('Groupe supprimé', 'info');
+    } catch (err) {
+        showToast(err.message || 'Erreur suppression groupe', 'error');
+    }
+}
+
+async function startGroupEdit(groupId) {
+    const group = adminGroups.find(g => String(g.id) === String(groupId));
+    if (!group) return;
+
+    const editIdInput = document.getElementById('adminGroupEditId');
+    const editNameInput = document.getElementById('adminGroupEditName');
+    const modal = document.getElementById('groupEditModal');
+    if (!editIdInput || !editNameInput || !modal) return;
+
+    editIdInput.value = String(group.id);
+    editNameInput.value = group.name || '';
+
+    const members = (group.members || []).map(member => Number(member.id || member)).filter(Boolean);
+    adminGroupEditMemberIds = Array.from(new Set(members));
+    renderGroupMemberInputs(adminGroupEditMemberIds, {
+        containerId: 'groupEditMembersList',
+        countId: 'groupEditMembersCount',
+        search: ''
+    });
+    modal.style.display = 'flex';
 }
 
 function confirmCreateFolder() {
@@ -460,8 +1594,10 @@ function handleSubmit() {
     const email = (currentAuthUser.email || '').trim();
     const comment = document.getElementById('uploaderComment').value.trim();
     const targetFolderId = document.getElementById('uploadTargetFolder').value || currentFolderId;
+    const targetFolderPath = getFolderPathName(targetFolderId);
 
     addFilesToFolder(selectedFiles, { name, email, comment }, targetFolderId);
+    recordUploadsToServer(selectedFiles, comment, targetFolderPath);
     showSuccessModal(selectedFiles.length);
     resetUploadForm();
 }
@@ -493,15 +1629,39 @@ function handleExplorerUpload(e) {
 
     const email = (currentAuthUser.email || '').trim();
     const comment = document.getElementById('uploaderComment').value.trim();
+    const targetFolderPath = getFolderPathName(currentFolderId);
 
     addFilesToFolder(Array.from(files), { name, email, comment }, currentFolderId);
     showToast(`${files.length} fichier(s) uploadé(s)`, 'success');
+    recordUploadsToServer(Array.from(files), comment, targetFolderPath);
     e.target.value = '';
     displayFiles();
 }
 
 function addFilesToCurrentFolder(files, uploader) {
     addFilesToFolder(files, uploader, currentFolderId);
+}
+
+function getFolderPathName(folderId) {
+    const path = getFolderPath(folderId);
+    return path.length ? path.map(folder => folder.name).join(' / ') : 'Racine';
+}
+
+function recordUploadsToServer(files, comment, folderPath) {
+    const entries = files.map(file => ({
+        fileName: file.name,
+        fileSize: file.size || 0,
+        fileType: getFileType(getFileExtension(file.name)),
+        comment: comment || null,
+        folderPath
+    }));
+
+    apiRequest('/api/uploads', {
+        method: 'POST',
+        body: JSON.stringify({ entries })
+    }).catch(() => {
+        showToast('Dépôt local OK, enregistrement centralisé indisponible.', 'error');
+    });
 }
 
 function addFilesToFolder(files, uploader, folderId) {
@@ -1009,11 +2169,12 @@ function createDefaultFileSystem() {
 }
 
 function saveFiles() {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(fileSystemData));
+    localStorage.setItem(getCurrentUserStorageKey(), JSON.stringify(fileSystemData));
+    scheduleDeskSync();
 }
 
 function loadStoredFiles() {
-    const stored = localStorage.getItem(STORAGE_KEY);
+    const stored = localStorage.getItem(getCurrentUserStorageKey());
     if (stored) {
         try {
             const parsed = JSON.parse(stored);
@@ -1035,6 +2196,7 @@ function loadStoredFiles() {
         try {
             migrateLegacyData(JSON.parse(legacy));
             saveFiles();
+            localStorage.removeItem(LEGACY_STORAGE_KEY);
         } catch (err) {
             console.error('Erreur migration :', err);
         }
@@ -1080,3 +2242,8 @@ window.renameItem = renameItem;
 window.deleteItem = deleteItem;
 window.viewFileDetails = viewFileDetails;
 window.showItemInfoModal = showItemInfoModal;
+window.startUserEdit = startUserEdit;
+window.removeUser = removeUser;
+window.startGroupEdit = startGroupEdit;
+window.removeGroup = removeGroup;
+window.openUserFollow = openUserFollow;

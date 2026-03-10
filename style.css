@@ -449,6 +449,13 @@ body {
 .form-group { margin-bottom: 1.125rem; }
 .form-group:last-child { margin-bottom: 0; }
 
+.form-actions-row {
+    display: flex;
+    gap: 0.625rem;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+}
+
 .form-group label {
     display: block;
     font-size: 0.8rem;
@@ -497,6 +504,162 @@ body {
     resize: vertical;
     min-height: 72px;
     font-family: 'Poppins', sans-serif;
+}
+
+.form-group input,
+.form-group input[type="text"],
+.form-group input[type="email"],
+.form-group input[type="password"],
+.form-group select,
+.form-group textarea {
+    width: 100%;
+    padding: 0.6rem 0.75rem;
+    border: 1.5px solid var(--line);
+    border-radius: var(--r-sm);
+    font-family: 'Poppins', sans-serif;
+    font-size: 0.84rem;
+    color: var(--ink-3);
+    background: var(--surface);
+    box-shadow: var(--shadow-xs);
+    transition: border-color var(--t) var(--ease), box-shadow var(--t) var(--ease);
+}
+
+.form-group input:focus,
+.form-group input[type="text"]:focus,
+.form-group input[type="email"]:focus,
+.form-group input[type="password"]:focus,
+.form-group select:focus,
+.form-group textarea:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-s);
+    outline: none;
+}
+
+.admin-grid {
+    display: grid;
+    grid-template-columns: minmax(280px, 360px) 1fr;
+    gap: 1rem;
+}
+
+.admin-table-wrap { background: transparent; }
+
+.admin-table-wrap .files-table th:last-child,
+.admin-table-wrap .files-table td.actions-cell {
+    width: 1%;
+    white-space: nowrap;
+}
+
+.admin-table-wrap .files-table td.actions-cell {
+    justify-content: flex-end;
+    gap: 0.45rem;
+}
+
+.group-members-list {
+    display: grid;
+    gap: 0.5rem;
+    max-height: 160px;
+    overflow: auto;
+    border: 1px solid var(--line);
+    padding: 0.7rem;
+    border-radius: var(--r-sm);
+    background: var(--bg-2);
+}
+
+.group-members-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.65rem;
+    margin-bottom: 0.6rem;
+}
+
+.group-members-search {
+    flex: 1;
+    min-width: 140px;
+    border: 1px solid var(--line);
+    border-radius: var(--r-xs);
+    padding: 0.45rem 0.58rem;
+    font-family: 'Poppins', sans-serif;
+    font-size: 0.76rem;
+    color: var(--ink-3);
+    background: var(--surface);
+    box-shadow: var(--shadow-xs);
+}
+
+.group-members-search:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-s);
+}
+
+.group-members-count {
+    font-size: 0.73rem;
+    color: var(--muted);
+}
+
+.group-member-item {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    font-size: 0.79rem;
+    color: var(--ink-2);
+    border: 1px solid var(--line);
+    background: var(--surface);
+    border-radius: var(--r-xs);
+    padding: 0.45rem 0.58rem;
+    min-height: 1.95rem;
+    transition: border-color var(--t) var(--ease), box-shadow var(--t) var(--ease), transform var(--t) var(--ease);
+}
+
+.group-member-item:hover {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-s);
+}
+
+.group-member-item input {
+    accent-color: var(--accent);
+    margin-right: 0.05rem;
+    flex-shrink: 0;
+}
+
+.group-members-empty {
+    color: var(--muted);
+    font-size: 0.78rem;
+    padding: 0.55rem 0.25rem;
+    text-align: center;
+}
+
+.follow-subtitle {
+    padding: 0.9rem 1rem 0.45rem;
+    font-size: 0.84rem;
+    font-weight: 600;
+    color: var(--ink-2);
+}
+
+.follow-scope-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.6rem;
+    margin: 0.3rem 0 0.75rem;
+}
+
+.follow-scope-label {
+    font-size: 0.76rem;
+    color: var(--muted);
+    font-weight: 600;
+}
+
+.follow-left-column {
+    display: grid;
+    gap: 1rem;
+    min-width: 0;
+}
+
+.follow-meta {
+    margin-top: 0.4rem;
+    font-size: 0.82rem;
+    color: var(--muted);
 }
 
 .folder-picker-btn {
@@ -932,6 +1095,12 @@ body {
     background: var(--accent-h);
     box-shadow: 0 4px 12px rgba(37,99,235,.28);
     transform: translateY(-1px);
+}
+
+.btn-sm {
+    padding: 0.2rem 0.7rem;
+    font-size: 0.71rem;
+    border-radius: var(--r-xs);
 }
 
 .btn-text-sm {
@@ -1474,6 +1643,7 @@ body {
 @media (max-width: 1024px) {
     .view-inner { padding: 1.75rem 2rem; }
     .upload-grid { grid-template-columns: 1fr; }
+    .admin-grid { grid-template-columns: 1fr; }
 }
 
 /* ===========================
