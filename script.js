@@ -91,9 +91,12 @@ function mapRole(role) {
     return normalized === 'admin' ? 'admin' : 'user';
 }
 
-function isAdminRole(user) {
-    if (!user?.role) return false;
-    return mapRole(user.role) === 'admin';
+function isAdminRole(userOrRole) {
+    const roleValue = typeof userOrRole === 'string'
+        ? userOrRole
+        : userOrRole?.role;
+    if (!roleValue) return false;
+    return mapRole(roleValue) === 'admin';
 }
 
 function getApiHeaders() {
@@ -700,7 +703,7 @@ function renderUsersTable() {
     const empty = document.getElementById('usersEmptyState');
     if (!tbody || !empty) return;
 
-    const isAdmin = isAdminRole(currentAuthUser?.role);
+    const isAdmin = isAdminRole(currentAuthUser);
 
     tbody.innerHTML = '';
     if (!adminUsers.length) {
@@ -836,23 +839,23 @@ function renderFollowGroupsTable() {
     adminGroups.forEach(group => {
         const tr = document.createElement('tr');
         const members = group.members || [];
-        const memberCount = Array.isArray(members)
+        const filteredMembers = Array.isArray(members)
             ? members.filter(member => {
                 const role = mapRole(member?.role);
                 const memberId = String(member?.id || '');
                 return role !== 'admin' && memberId !== String(currentAuthUser?.id);
-            }).length
-            : 0;
-
-        const memberNames = Array.isArray(members)
-            ? members
-                .map((member) => {
-                    if (!member) return null;
-                    if (typeof member === 'string') return member;
-                    return member.name || member.username || member.email || String(member.id || '');
-                })
-                .filter(Boolean)
+            })
             : [];
+
+        const memberCount = filteredMembers.length;
+
+        const memberNames = filteredMembers
+            .map((member) => {
+                if (!member) return null;
+                if (typeof member === 'string') return member;
+                return member.name || member.username || member.email || String(member.id || '');
+            })
+            .filter(Boolean);
 
         const membersPreview = memberNames.length > 3
             ? `${memberNames.slice(0, 3).join(', ')} et ${memberNames.length - 3} autre(s)`

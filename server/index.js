@@ -649,7 +649,7 @@ app.get('/api/admin/users/:id/overview', requireAuth, requireAdmin, async (req, 
        LEFT JOIN user_groups ug ON ug.user_id = u.id
        LEFT JOIN groups g ON g.id = ug.group_id
        WHERE u.id = $1
-       GROUP BY u.id`,
+       GROUP BY u.id, fd.payload`,
       [id]
     );
 
