@@ -7,6 +7,7 @@ const AUTH_STORAGE_KEY = 'filedesk_current_user';
 const AUTH_CACHE_KEY = 'filedesk_current_user_cache';
 const API_BASE_URL = (window.AppConfig && window.AppConfig.apiBaseUrl) || 'http://localhost:3000';
 const LANGUAGE_STORAGE_KEY = 'filedesk_lang';
+let currentLanguage = 'fr';
 
 const I18N = {
     fr: {
@@ -31,13 +32,23 @@ const I18N = {
         'action.edit': 'Modifier',
         'action.delete': 'Supprimer',
         'action.open': 'Ouvrir',
+        'action.rename': 'Renommer',
+        'action.details': 'Details',
         'action.view': 'Voir',
         'action.download': 'Telecharger',
         'action.viewDesk': 'Voir bureau',
         'action.viewMembers': 'Voir membres',
         'desk.parent': 'Dossier parent',
         'desk.folder': 'Dossier',
-        'desk.file': 'Fichier'
+        'desk.file': 'Fichier',
+        'follow.noneSelectedTitle': 'Aucun utilisateur selectionne',
+        'follow.noneSelectedMeta': 'Selectionnez un utilisateur pour voir son bureau et son historique.',
+        'follow.scope.none': 'Aucun filtre de groupe actif.',
+        'follow.scope.selection': 'Selection : utilisateurs du groupe {group}',
+        'follow.scope.filter': 'Filtre actif : utilisateurs du groupe {group}',
+        'follow.loading': 'Chargement...',
+        'follow.groupPrefix': 'Groupe',
+        'label.optionalSuffix': '— optionnel'
     },
     tr: {
         'app.title': 'FileDesk — Dosya Yukleme Platformu',
@@ -61,44 +72,225 @@ const I18N = {
         'action.edit': 'Duzenle',
         'action.delete': 'Sil',
         'action.open': 'Ac',
+        'action.rename': 'Yeniden adlandir',
+        'action.details': 'Detay',
         'action.view': 'Gor',
         'action.download': 'Indir',
         'action.viewDesk': 'Masaustunu gor',
         'action.viewMembers': 'Uyeleri gor',
         'desk.parent': 'Ust klasor',
         'desk.folder': 'Klasor',
-        'desk.file': 'Dosya'
+        'desk.file': 'Dosya',
+        'follow.noneSelectedTitle': 'Kullanici secilmedi',
+        'follow.noneSelectedMeta': 'Masaustu ve gecmisi gormek icin kullanici secin.',
+        'follow.scope.none': 'Aktif grup filtresi yok.',
+        'follow.scope.selection': 'Secim: {group} grubundaki kullanicilar',
+        'follow.scope.filter': 'Aktif filtre: {group} grubundaki kullanicilar',
+        'follow.loading': 'Yukleniyor...',
+        'follow.groupPrefix': 'Grup',
+        'label.optionalSuffix': '— opsiyonel'
     }
 };
 
+const TR_TEXT_MAP = {
+    'Invite': 'Misafir',
+    'Deposer un fichier': 'Dosya yukle',
+    'Fichiers a deposer': 'Yuklenecek dosyalar',
+    'Glissez vos fichiers ici': 'Dosyalarinizi buraya surukleyin',
+    'ou': 'veya',
+    'Tous types · 50 MB max par fichier': 'Tum turler · Dosya basina en fazla 50 MB',
+    'Relachez pour ajouter': 'Eklemek icin birakin',
+    'Valider le depot': 'Yuklemeyi onayla',
+    'Naviguez, creez des dossiers et gerez vos fichiers': 'Gezinin, klasor olusturun ve dosyalarinizi yonetin',
+    'Nouveau dossier': 'Yeni klasor',
+    'Nom A→Z': 'Ada gore A→Z',
+    'Plus recents': 'En yeniler',
+    'Explorateur': 'Dosya Gezgini',
+    'Racine': 'Kok',
+    'Tous les types': 'Tum turler',
+    'Dossiers': 'Klasorler',
+    'Documents': 'Belgeler',
+    'Images': 'Gorseller',
+    'Videos': 'Videolar',
+    'Autres': 'Diger',
+    'Plus anciens': 'En eskiler',
+    'Taille': 'Boyut',
+    'Dossier vide': 'Klasor bos',
+    'Uploader ici': 'Buraya yukle',
+    'Nom': 'Ad',
+    'Depose par': 'Yukleyen',
+    'Creez un dossier ou deposez des fichiers ici': 'Burada klasor olusturun veya dosya yukleyin',
+    'Tous les fichiers deposes par votre compte': 'Hesabiniz tarafindan yuklenen tum dosyalar',
+    'Aucun depot': 'Yukleme yok',
+    'Les nouveaux depots apparaitront ici.': 'Yeni yuklemeler burada gorunecek.',
+    'Creer, modifier et supprimer les comptes': 'Hesaplari olustur, duzenle ve sil',
+    'Identifiant': 'Kullanici adi',
+    'Mot de passe': 'Sifre',
+    'Role': 'Rol',
+    'Utilisateur normal': 'Normal kullanici',
+    'Enregistrer': 'Kaydet',
+    'Annuler': 'Iptal',
+    'Aucun utilisateur pour le moment.': 'Su an kullanici yok.',
+    'Creer et affecter des utilisateurs aux groupes': 'Gruplar olustur ve kullanicilari ata',
+    'Nom du groupe': 'Grup adi',
+    'Membres': 'Uyeler',
+    'Aucun groupe cree.': 'Henuz grup yok.',
+    "Voir le bureau (depots) et l'historique d'un utilisateur": 'Bir kullanicinin masaustunu (yuklemelerini) ve gecmisini gor',
+    'Aucun utilisateur a suivre.': 'Takip edilecek kullanici yok.',
+    'Aucun groupe pour le moment.': 'Su an grup yok.',
+    'Aucun utilisateur selectionne': 'Kullanici secilmedi',
+    'Aucun filtre de groupe actif.': 'Aktif grup filtresi yok.',
+    'Voir tous les utilisateurs': 'Tum kullanicilari gor',
+    "Selectionnez un utilisateur pour voir son bureau et son historique.": 'Masaustu ve gecmisi gormek icin kullanici secin.',
+    'Bureau': 'Masaustu',
+    'Type': 'Tur',
+    'Taille': 'Boyut',
+    'Date': 'Tarih',
+    'Actions': 'Islemler',
+    'Aucun element dans le bureau.': 'Masaustunde oge yok.',
+    'Historique des depots': 'Yukleme gecmisi',
+    'Fichier': 'Dosya',
+    'Dossier': 'Klasor',
+    'Selectionnez un utilisateur.': 'Bir kullanici secin.',
+    'Depot reussi !': 'Yukleme basarili!',
+    'Vos fichiers ont ete deposes avec succes.': 'Dosyalariniz basariyla yuklendi.',
+    'Parfait': 'Tamam',
+    'Entrez un nom pour le dossier': 'Klasor icin bir ad girin',
+    'Creer': 'Olustur',
+    'Fermer': 'Kapat',
+    'Apercu du fichier': 'Dosya onizleme',
+    'Modifier utilisateur': 'Kullaniciyi duzenle',
+    'Mise a jour du compte utilisateur': 'Kullanici hesabini guncelle',
+    'Modifier groupe': 'Grubu duzenle',
+    'Mise a jour du groupe': 'Grup guncellemesi',
+    'Groupe': 'Grup',
+    'Cree le': 'Olusturma tarihi',
+    'Commentaire': 'Yorum',
+    'Formulaire groupe': 'Grup formu',
+    'Vos informations': 'Bilgileriniz',
+    'Dossier source': 'Kaynak klasor',
+    'Informations complementaires sur ce depot…': 'Bu yukleme icin ek bilgiler…',
+    'Zone de depot': 'Yukleme alani',
+    'Arborescence des dossiers': 'Klasor agaci',
+    'Nom du dossier': 'Klasor adi',
+    'Laisser vide pour ne pas modifier': 'Degistirmemek icin bos birak',
+    'Rechercher un utilisateur...': 'Kullanici ara...',
+    'Rechercher un fichier ou deposant...': 'Dosya veya yukleyen ara...'
+};
+
+const TR_PLACEHOLDER_MAP = {
+    'Informations complementaires sur ce depot…': 'Bu yukleme icin ek bilgiler…',
+    'Rechercher…': 'Ara...',
+    'Rechercher un fichier ou déposant...': 'Dosya veya yukleyen ara...',
+    'Rechercher un utilisateur...': 'Kullanici ara...',
+    'Nom du dossier': 'Klasor adi',
+    'Laisser vide pour ne pas modifier': 'Degistirmemek icin bos birak'
+};
+
+function normalizeI18nText(value) {
+    return String(value || '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
 function getCurrentLanguage() {
-    const saved = localStorage.getItem(LANGUAGE_STORAGE_KEY);
-    return saved === 'tr' ? 'tr' : 'fr';
+    return currentLanguage;
+}
+
+function initLanguage() {
+    try {
+        const saved = localStorage.getItem(LANGUAGE_STORAGE_KEY);
+        currentLanguage = saved === 'tr' ? 'tr' : 'fr';
+    } catch (error) {
+        currentLanguage = 'fr';
+    }
 }
 
 function t(key) {
-    const lang = getCurrentLanguage();
-    return I18N[lang]?.[key] || I18N.fr[key] || key;
+    return I18N[currentLanguage]?.[key] || I18N.fr[key] || key;
+}
+
+function tf(key, vars = {}) {
+    let value = t(key);
+    Object.entries(vars).forEach(([name, replacement]) => {
+        value = value.replace(new RegExp(`\\{${name}\\}`, 'g'), String(replacement));
+    });
+    return value;
+}
+
+function formatMemberCount(count) {
+    const n = Number(count) || 0;
+    return currentLanguage === 'tr' ? `${n} uye` : `${n} membre(s)`;
 }
 
 function applyStaticTranslations() {
-    const lang = getCurrentLanguage();
-    document.documentElement.lang = lang;
+    document.documentElement.lang = currentLanguage;
     document.querySelectorAll('[data-i18n]').forEach((el) => {
         const key = el.getAttribute('data-i18n');
         if (!key) return;
         el.textContent = t(key);
     });
     document.title = t('app.title');
+    const optionalSuffix = document.getElementById('optionalSuffix');
+    if (optionalSuffix) {
+        optionalSuffix.textContent = t('label.optionalSuffix');
+    }
+    const groupMembersCount = document.getElementById('groupMembersCount');
+    if (groupMembersCount) {
+        groupMembersCount.textContent = formatMemberCount(0);
+    }
+    const groupEditMembersCount = document.getElementById('groupEditMembersCount');
+    if (groupEditMembersCount) {
+        groupEditMembersCount.textContent = formatMemberCount(0);
+    }
+    if (currentLanguage === 'tr') {
+        applyTurkishTextOverrides();
+    }
+}
+
+function applyTurkishTextOverrides() {
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null);
+    let node = walker.nextNode();
+    while (node) {
+        const raw = node.nodeValue;
+        const trimmed = raw.trim();
+        const normalized = normalizeI18nText(trimmed);
+        if (trimmed && TR_TEXT_MAP[normalized]) {
+            node.nodeValue = raw.replace(trimmed, TR_TEXT_MAP[normalized]);
+        }
+        node = walker.nextNode();
+    }
+
+    document.querySelectorAll('[placeholder]').forEach((el) => {
+        const current = el.getAttribute('placeholder') || '';
+        const translated = TR_PLACEHOLDER_MAP[normalizeI18nText(current)];
+        if (translated) {
+            el.setAttribute('placeholder', translated);
+        }
+    });
+
+    document.querySelectorAll('[aria-label]').forEach((el) => {
+        const current = el.getAttribute('aria-label') || '';
+        const translated = TR_TEXT_MAP[normalizeI18nText(current)];
+        if (translated) {
+            el.setAttribute('aria-label', translated);
+        }
+    });
 }
 
 function initLanguageSwitcher() {
     const select = document.getElementById('languageSelect');
     if (!select) return;
-    select.value = getCurrentLanguage();
+    select.value = currentLanguage;
     select.addEventListener('change', () => {
         const next = select.value === 'tr' ? 'tr' : 'fr';
-        localStorage.setItem(LANGUAGE_STORAGE_KEY, next);
+        try {
+            localStorage.setItem(LANGUAGE_STORAGE_KEY, next);
+        } catch (error) {
+            // Ignore storage failures and still reload with in-memory fallback.
+        }
         window.location.reload();
     });
 }
@@ -192,6 +384,14 @@ function mapRole(role) {
     return normalized === 'admin' ? 'admin' : 'user';
 }
 
+function localizeRootName(name) {
+    const normalized = normalizeI18nText(name);
+    if (normalized === 'Racine') {
+        return currentLanguage === 'tr' ? 'Kok' : 'Racine';
+    }
+    return name;
+}
+
 function isAdminRole(userOrRole) {
     const roleValue = typeof userOrRole === 'string'
         ? userOrRole
@@ -224,7 +424,12 @@ async function apiRequest(path, options = {}) {
 // INITIALISATION
 // ===========================
 document.addEventListener('DOMContentLoaded', async () => {
-    applyStaticTranslations();
+    initLanguage();
+    try {
+        applyStaticTranslations();
+    } catch (error) {
+        console.error('Translation init failed:', error);
+    }
     initLanguageSwitcher();
 
     const isAuthenticated = await initAuth();
@@ -882,7 +1087,7 @@ function renderHistoryTable(uploads) {
             <td>${escapeHtml(file.file_name)}</td>
             <td><span class="badge ${getUploadBadgeClass(file.file_type)}">${escapeHtml(file.file_type || 'OTHER')}</span></td>
             <td>${formatFileSize(file.file_size)}</td>
-            <td>${escapeHtml(file.folder_path || 'Racine')}</td>
+            <td>${escapeHtml(localizeRootName(file.folder_path || 'Racine'))}</td>
             <td class="cell-muted">${escapeHtml(file.created_at || '')}</td>
         `;
         tbody.appendChild(tr);
@@ -962,7 +1167,7 @@ function renderGroupsTable() {
         tr.innerHTML = `
             <td class="cell-compact cell-truncate" title="${escapeHtml(group.name)}">${escapeHtml(group.name)}</td>
             <td class="cell-compact">${escapeHtml(created)}</td>
-            <td class="cell-compact">${members} membre(s)</td>
+            <td class="cell-compact">${formatMemberCount(members)}</td>
             <td class="actions-cell">
                 <button class="action-btn" onclick="startGroupEdit(${group.id})">${escapeHtml(t('action.edit'))}</button>
                 <button class="action-btn delete" onclick="removeGroup(${group.id})">${escapeHtml(t('action.delete'))}</button>
@@ -1016,11 +1221,11 @@ function renderFollowUsersTable(users = getTrackableFollowUsers()) {
 
     if (followSelectionMode === 'group') {
         const selectedLabel = selectedFollowGroupId
-            ? (adminGroups.find(group => String(group.id) === String(selectedFollowGroupId))?.name || `Groupe ${selectedFollowGroupId}`)
-            : 'Groupe';
-        updateFollowScopeLabel(`Sélection : utilisateurs du groupe ${selectedLabel}`);
+            ? (adminGroups.find(group => String(group.id) === String(selectedFollowGroupId))?.name || `${t('follow.groupPrefix')} ${selectedFollowGroupId}`)
+            : t('follow.groupPrefix');
+        updateFollowScopeLabel(tf('follow.scope.selection', { group: selectedLabel }));
     } else {
-        updateFollowScopeLabel('Aucun filtre de groupe actif.');
+        updateFollowScopeLabel(t('follow.scope.none'));
     }
 }
 
@@ -1057,7 +1262,10 @@ function renderFollowGroupsTable() {
             })
             .filter(Boolean);
 
-        const groupLabel = `${group.name} (${memberCount} membre(s))`;
+        const memberLabel = currentLanguage === 'tr'
+            ? 'uye'
+            : `membre${memberCount > 1 ? '(s)' : ''}`;
+        const groupLabel = `${group.name} (${memberCount} ${memberLabel})`;
 
         tr.innerHTML = `
             <td class="cell-truncate" title="${escapeHtml(memberNames.join(', '))}">${escapeHtml(groupLabel)}</td>
@@ -1075,11 +1283,11 @@ function resetFollowView() {
     followSelectionMode = 'users';
     selectedFollowGroupId = null;
     followSelectionRequestId = 0;
-    updateFollowScopeLabel('Aucun filtre de groupe actif.');
+    updateFollowScopeLabel(t('follow.scope.none'));
     const title = document.getElementById('followUserTitle');
     const meta = document.getElementById('followUserMeta');
-    if (title) title.textContent = 'Aucun utilisateur sélectionné';
-    if (meta) meta.textContent = 'Sélectionnez un utilisateur pour voir son bureau et son historique.';
+    if (title) title.textContent = t('follow.noneSelectedTitle');
+    if (meta) meta.textContent = t('follow.noneSelectedMeta');
     renderFollowHistory([]);
     renderFollowDesk(null);
 }
@@ -1091,7 +1299,7 @@ async function openUserFollow(userId) {
     selectedFollowUserId = Number(userId);
     const title = document.getElementById('followUserTitle');
     const meta = document.getElementById('followUserMeta');
-    if (title) title.textContent = 'Chargement...';
+    if (title) title.textContent = t('follow.loading');
     if (meta) meta.textContent = 'Récupération du détail utilisateur...';
 
     try {
@@ -1108,7 +1316,7 @@ async function openUserFollow(userId) {
         const overview = overviewResult || {};
         const user = overview.user;
         if (!user) {
-            throw new Error('Utilisateur introuvable');
+            throw new Error(currentLanguage === 'tr' ? 'Kullanici bulunamadi' : 'Utilisateur introuvable');
         }
 
         const historyPayload = historyResult && !historyResult._error
@@ -1131,7 +1339,11 @@ async function openUserFollow(userId) {
 
         selectedFollowUserId = user.id;
         if (title) title.textContent = `${user.name || user.username} — ${user.email || ''}`;
-        if (meta) meta.textContent = `Rôle : ${mapRoleLabel(user.role)} | Dépôts : ${overview.totalUploads || 0} | Groupes : ${groups}`;
+        if (meta) {
+            meta.textContent = currentLanguage === 'tr'
+                ? `Rol: ${mapRoleLabel(user.role)} | Yukleme: ${overview.totalUploads || 0} | Gruplar: ${groups}`
+                : `Rôle : ${mapRoleLabel(user.role)} | Dépôts : ${overview.totalUploads || 0} | Groupes : ${groups}`;
+        }
 
         const normalizedDesk = normalizeDeskData(deskPayload?.desk);
         selectedFollowDesk = normalizedDesk || createDefaultFileSystem();
@@ -1139,13 +1351,13 @@ async function openUserFollow(userId) {
         renderFollowDesk(selectedFollowDesk);
 
         if (followSelectionMode === 'group' && selectedFollowGroupId) {
-            const groupLabel = getFollowActiveGroupName() || `Groupe ${selectedFollowGroupId}`;
-            updateFollowScopeLabel(`Filtre actif : utilisateurs du groupe ${groupLabel}`);
+            const groupLabel = getFollowActiveGroupName() || `${t('follow.groupPrefix')} ${selectedFollowGroupId}`;
+            updateFollowScopeLabel(tf('follow.scope.filter', { group: groupLabel }));
             setFollowScopeUi(true);
         } else {
             followSelectionMode = 'users';
             selectedFollowGroupId = null;
-            updateFollowScopeLabel('Aucun filtre de groupe actif.');
+            updateFollowScopeLabel(t('follow.scope.none'));
             setFollowScopeUi(false);
         }
     } catch (error) {
@@ -1174,12 +1386,12 @@ function showAllFollowUsers() {
     selectedFollowUserId = null;
     setFollowScopeUi(false);
     renderFollowUsersTable();
-    updateFollowScopeLabel('Aucun filtre de groupe actif.');
+    updateFollowScopeLabel(t('follow.scope.none'));
 
     const title = document.getElementById('followUserTitle');
     const meta = document.getElementById('followUserMeta');
-    if (title) title.textContent = 'Aucun utilisateur sélectionné';
-    if (meta) meta.textContent = 'Sélectionnez un utilisateur pour voir son bureau et son historique.';
+    if (title) title.textContent = t('follow.noneSelectedTitle');
+    if (meta) meta.textContent = t('follow.noneSelectedMeta');
     renderFollowHistory([]);
     renderFollowDesk(null);
 }
@@ -1197,11 +1409,13 @@ function openGroupFollow(groupId, refreshUsers = true) {
     setFollowScopeUi(true);
     const members = getTrackableFollowUsersInGroup(group.id);
     renderFollowUsersTable(members);
-    updateFollowScopeLabel(`Filtre actif : utilisateurs du groupe ${group.name}`);
+    updateFollowScopeLabel(tf('follow.scope.filter', { group: group.name }));
     const title = document.getElementById('followUserTitle');
     const meta = document.getElementById('followUserMeta');
-    if (title) title.textContent = `Groupe : ${group.name}`;
-    if (meta) meta.textContent = 'Choisissez un membre pour ouvrir son bureau et son historique.';
+    if (title) title.textContent = `${t('follow.groupPrefix')} : ${group.name}`;
+    if (meta) meta.textContent = currentLanguage === 'tr'
+        ? 'Masaustunu ve gecmisi acmak icin bir uye secin.'
+        : 'Choisissez un membre pour ouvrir son bureau et son historique.';
 
     renderFollowHistory([]);
     renderFollowDesk(null);
@@ -1229,7 +1443,7 @@ function renderFollowHistory(files) {
             <td>${escapeHtml(file.file_name)}</td>
             <td><span class="badge ${getUploadBadgeClass(file.file_type)}">${escapeHtml(file.file_type || 'OTHER')}</span></td>
             <td>${formatFileSize(file.file_size)}</td>
-            <td>${escapeHtml(file.folder_path || 'Racine')}</td>
+            <td>${escapeHtml(localizeRootName(file.folder_path || 'Racine'))}</td>
             <td>${escapeHtml(file.created_at || '')}</td>
         `;
         tbody.appendChild(tr);
@@ -1379,7 +1593,7 @@ function renderFollowDeskBreadcrumb() {
         const btn = document.createElement('button');
         btn.type = 'button';
         btn.className = `follow-breadcrumb-item${index === path.length - 1 ? ' active' : ''}`;
-        btn.textContent = folder.name || 'Racine';
+        btn.textContent = localizeRootName(folder.name || 'Racine');
         btn.addEventListener('click', () => {
             if (index !== path.length - 1) {
                 openFollowDeskFolder(folder.id);
@@ -1452,7 +1666,7 @@ function renderGroupMemberInputs(selectedUserIds = [], options = {}) {
     `;
 
     if (countElement) {
-        countElement.textContent = `${selectedUsers.length} membre(s)`;
+        countElement.textContent = formatMemberCount(selectedUsers.length);
     }
 }
 
@@ -1957,7 +2171,7 @@ async function addFilesToCurrentFolder(files, uploader) {
 
 function getFolderPathName(folderId) {
     const path = getFolderPath(folderId);
-    return path.length ? path.map(folder => folder.name).join(' / ') : 'Racine';
+    return path.length ? path.map(folder => localizeRootName(folder.name)).join(' / ') : localizeRootName('Racine');
 }
 
 function recordUploadsToServer(files, comment, folderPath) {
@@ -2058,7 +2272,7 @@ function renderBreadcrumb() {
     path.forEach((folder, i) => {
         const btn = document.createElement('button');
         btn.className = 'breadcrumb-item' + (i === path.length - 1 ? ' active' : '');
-        btn.textContent = folder.name;
+        btn.textContent = localizeRootName(folder.name);
         btn.addEventListener('click', () => {
             if (i < path.length - 1) {
                 currentFolderId = folder.id;
@@ -2091,10 +2305,13 @@ function updateCurrentFolderHints() {
     const selectedFolderId = document.getElementById('uploadTargetFolder')?.value || currentFolderId;
     const path = getFolderPath(selectedFolderId);
     const pathText = (path.length ? path : getFolderPath(fileSystemData.rootId || 'root'))
-        .map(p => p.name)
+        .map(p => localizeRootName(p.name))
         .join(' / ');
     const el = document.getElementById('currentUploadFolder');
-    if (el) el.innerHTML = `Dossier cible : <strong>${pathText}</strong>`;
+    if (el) {
+        const prefix = currentLanguage === 'tr' ? 'Hedef klasor' : 'Dossier cible';
+        el.innerHTML = `${prefix} : <strong>${pathText}</strong>`;
+    }
 }
 
 function openFolder(folderId) {
@@ -2186,13 +2403,13 @@ function createItemRow(item) {
     const ext = isFolder ? '' : item.extension || '?';
     const color = isFolder ? '' : getFileColor(item.fileType);
     const badgeClass = getBadgeClass(item);
-    const badgeLabel = isFolder ? 'Dossier' : item.fileType;
+    const badgeLabel = isFolder ? t('desk.folder') : item.fileType;
 
     const nameCell = isFolder
         ? `<button class="folder-btn" onclick="openFolder('${item.id}')">
                <span class="folder-btn-icon">📁</span>
                ${escapeHtml(item.name)}
-               <span class="folder-chip">Dossier</span>
+               <span class="folder-chip">${escapeHtml(t('desk.folder'))}</span>
            </button>`
         : `<div class="file-name-cell">
                <div class="file-icon-sm" style="background:${color}">${escapeHtml(ext.slice(0,4))}</div>
@@ -2214,11 +2431,11 @@ function createItemRow(item) {
         <td data-label="Actions" class="actions-cell">
             <button class="action-btn mobile-info-btn" onclick="showItemInfoModal('${item.id}')">Infos</button>
             ${isFolder
-                ? `<button class="action-btn" onclick="openFolder('${item.id}')">Ouvrir</button>`
-                : `<button class="action-btn" onclick="viewFileDetails('${item.id}')">Détails</button>`
+                ? `<button class="action-btn" onclick="openFolder('${item.id}')">${escapeHtml(t('action.open'))}</button>`
+                : `<button class="action-btn" onclick="viewFileDetails('${item.id}')">${escapeHtml(t('action.details'))}</button>`
             }
-            <button class="action-btn" onclick="renameItem('${item.id}')">Renommer</button>
-            <button class="action-btn delete" onclick="deleteItem('${item.id}')">Supprimer</button>
+            <button class="action-btn" onclick="renameItem('${item.id}')">${escapeHtml(t('action.rename'))}</button>
+            <button class="action-btn delete" onclick="deleteItem('${item.id}')">${escapeHtml(t('action.delete'))}</button>
         </td>
     `;
     return tr;
@@ -2323,8 +2540,8 @@ function populateUploadFolderSelect(preferredFolderId = null) {
     hiddenInput.value = selectedFolder;
     ensureUploadTreePathExpanded(selectedFolder);
 
-    const path = getFolderPath(selectedFolder).map(folder => folder.name).join(' / ');
-    label.textContent = path || 'Racine';
+    const path = getFolderPath(selectedFolder).map(folder => localizeRootName(folder.name)).join(' / ');
+    label.textContent = path || localizeRootName('Racine');
 
     tree.innerHTML = '';
     renderUploadFolderTreeNode(rootId, 0, selectedFolder, tree);
